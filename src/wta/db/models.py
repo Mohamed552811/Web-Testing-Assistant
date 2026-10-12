@@ -129,6 +129,9 @@ class Scenario(Base):
     traces: Mapped[list["RunTrace"]] = relationship(
         back_populates="scenario", cascade="all, delete-orphan", order_by="(RunTrace.timestamp, RunTrace.id)"
     )
+    runs: Mapped[list["Run"]] = relationship(
+        back_populates="scenario", cascade="all, delete-orphan", order_by="Run.started_at"
+    )
 
     __table_args__ = (
         UniqueConstraint("session_id", "batch_number", "position", name="uq_scenario_slot"),
@@ -234,17 +237,58 @@ class ActionLog(Base):
     step: Mapped[Step] = relationship(back_populates="action_logs")
 
 
+class RunOutcomeKind(enum.StrEnum):
+    RUNNING = "running"
+    FINISHED = "finished"
+    STOPPED = "stopped"
+    FAILED = "failed"
+
+
+class Run(Base):
+    """One `claude -p` run of one scenario (including any --resume continuations)."""
+
+    __tablename__ = "run"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scenario_id: Mapped[int] = mapped_column(ForeignKey("scenario.id", ondelete="CASCADE"), index=True)
+    run_dir: Mapped[str] = mapped_column(Text)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime)
+    outcome: Mapped[RunOutcomeKind] = mapped_column(_enum(RunOutcomeKind, "run_outcome"), default=RunOutcomeKind.RUNNING)
+    exit_code: Mapped[int | None] = mapped_column(Integer)
+    num_turns: Mapped[int | None] = mapped_column(Integer)
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cache_read_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cache_creation_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    # Plan usage before the run and as reported during it (percent), from rate_limit_event.
+    five_hour_before: Mapped[float | None] = mapped_column()
+    five_hour_seen: Mapped[float | None] = mapped_column()
+    seven_day_before: Mapped[float | None] = mapped_column()
+    seven_day_seen: Mapped[float | None] = mapped_column()
+    summary: Mapped[str] = mapped_column(Text, default="")
+    site_notes_used: Mapped[int] = mapped_column(Integer, default=0)
+
+    scenario: Mapped[Scenario] = relationship(back_populates="runs")
+    traces: Mapped[list["RunTrace"]] = relationship(
+        back_populates="run", order_by="(RunTrace.timestamp, RunTrace.id)"
+    )
+
+
 class RunTrace(Base):
     __tablename__ = "run_trace"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     scenario_id: Mapped[int] = mapped_column(ForeignKey("scenario.id", ondelete="CASCADE"), index=True)
     step_id: Mapped[int | None] = mapped_column(ForeignKey("step.id", ondelete="SET NULL"))
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("run.id", ondelete="CASCADE"), index=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     kind: Mapped[TraceKind] = mapped_column(_enum(TraceKind, "trace_kind"))
     text: Mapped[str] = mapped_column(Text)
 
     scenario: Mapped[Scenario] = relationship(back_populates="traces")
+    run: Mapped[Run | None] = relationship(back_populates="traces")
 
 
 class Bug(Base):
