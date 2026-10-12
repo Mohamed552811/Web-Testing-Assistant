@@ -2,16 +2,17 @@
 
 import sys
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWebEngineCore import qWebEngineChromiumVersion
-from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QMessageBox, QSplitter, QTabWidget
 
 from wta import __version__
 from wta.browser import BrowserPane
 from wta.db import Database, store
 from wta.db.models import TestSession
 from wta.paths import database_path
+from wta.scenario_tab import ScenarioTab
 from wta.session_dialogs import OpenSessionDialog, SessionDialog
 
 APP_TITLE = "Web Testing Assistant"
@@ -23,12 +24,22 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.db = db
         self.current_session: TestSession | None = None
-        self.resize(1280, 860)
+        self.resize(1600, 940)
 
         self.browser = BrowserPane(self)
-        self.setCentralWidget(self.browser)
         self.browser.view.load(QUrl(START_PAGE))
         self.browser.status_message.connect(self.statusBar().showMessage)
+
+        self.scenario_tab = ScenarioTab(db, self)
+        self.scenario_tab.status_message.connect(self.statusBar().showMessage)
+        self.tabs = QTabWidget()
+        self.tabs.addTab(self.scenario_tab, "Scenarios")
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.addWidget(self.browser)
+        splitter.addWidget(self.tabs)
+        splitter.setSizes([850, 750])
+        self.setCentralWidget(splitter)
 
         self._build_menu()
         self._update_title()
@@ -84,6 +95,7 @@ class MainWindow(QMainWindow):
         self.current_session = session
         self.details_action.setEnabled(True)
         self._update_title()
+        self.scenario_tab.set_session(session.id)
         self.browser.view.load(QUrl(session.target_url))
         self.statusBar().showMessage(f"Opened session “{session.name}”")
 
