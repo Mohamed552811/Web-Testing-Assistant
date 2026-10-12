@@ -134,7 +134,8 @@ class Scenario(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("session_id", "batch_number", "position", name="uq_scenario_slot"),
+        # Scenario and smoke-test batches are numbered separately.
+        UniqueConstraint("session_id", "kind", "batch_number", "position", name="uq_scenario_slot"),
         CheckConstraint("batch_number >= 1", name="ck_scenario_batch"),
         CheckConstraint(f"position BETWEEN 1 AND {MAX_SCENARIOS_PER_BATCH}", name="ck_scenario_position"),
     )

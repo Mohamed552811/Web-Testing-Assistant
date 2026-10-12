@@ -6,12 +6,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 
 from wta.db.database import Database
+from wta.urls import normalize_url
 from wta.db.models import (
     MAX_SCENARIOS_PER_BATCH,
     Review,
     ReviewDecision,
     Scenario,
     ScenarioKind,
+    SmokePage,
     Step,
     StepStatus,
     TestSession,
@@ -67,9 +69,12 @@ def _get(orm: OrmSession, cls, ident: int):
 
 
 # --- batches -----------------------------------------------------------------
+# Scenario batches and smoke-test batches are numbered separately (kind is part of the slot).
+
+_SCENARIO = ScenarioKind.SCENARIO
 
 
-def batch_numbers(db: Database, session_id: int, kind: ScenarioKind = ScenarioKind.SCENARIO) -> list[int]:
+def batch_numbers(db: Database, session_id: int, kind: ScenarioKind = _SCENARIO) -> list[int]:
     """Batch numbers that have at least one scenario of this kind, ascending."""
     with db.Session() as orm:
         return list(
@@ -82,25 +87,28 @@ def batch_numbers(db: Database, session_id: int, kind: ScenarioKind = ScenarioKi
         )
 
 
-def batch_scenarios(db: Database, session_id: int, batch: int) -> list[Scenario]:
+def batch_scenarios(db: Database, session_id: int, batch: int, kind: ScenarioKind = _SCENARIO) -> list[Scenario]:
     with db.Session() as orm:
-        return _batch_scenarios(orm, session_id, batch)
+        scenarios = _batch_scenarios(orm, session_id, batch, kind)
+        for scenario in scenarios:
+            scenario.smoke_page  # load before the ORM session closes
+        return scenarios
 
 
-def _batch_scenarios(orm: OrmSession, session_id: int, batch: int) -> list[Scenario]:
+def _batch_scenarios(orm: OrmSession, session_id: int, batch: int, kind: ScenarioKind) -> list[Scenario]:
     return list(
         orm.scalars(
             select(Scenario)
-            .where(Scenario.session_id == session_id, Scenario.batch_number == batch)
+            .where(Scenario.session_id == session_id, Scenario.batch_number == batch, Scenario.kind == kind)
             .order_by(Scenario.position)
         )
     )
 
 
-def batch_is_reviewed(db: Database, session_id: int, batch: int) -> bool:
+def batch_is_reviewed(db: Database, session_id: int, batch: int, kind: ScenarioKind = _SCENARIO) -> bool:
     """True when every scenario in the batch has steps and every step has a final review."""
     with db.Session() as orm:
-        scenarios = _batch_scenarios(orm, session_id, batch)
+        scenarios = _batch_scenarios(orm, session_id, batch, kind)
         if not scenarios:
             return False
         for scenario in scenarios:
@@ -109,17 +117,19 @@ def batch_is_reviewed(db: Database, session_id: int, batch: int) -> bool:
         return True
 
 
-def next_batch_number(db: Database, session_id: int) -> int:
-    """The batch a new scenario batch would get. Raises if the latest batch is not fully reviewed.
+def next_batch_number(db: Database, session_id: int, kind: ScenarioKind = _SCENARIO) -> int:
+    """The batch a new batch of this kind would get. Raises if the latest one is not fully reviewed.
 
     The first batch is always allowed. Later batches use more plan usage, so the UI
     asks for confirmation before calling this.
     """
     with db.Session() as orm:
-        latest = orm.scalar(select(func.max(Scenario.batch_number)).where(Scenario.session_id == session_id))
+        latest = orm.scalar(
+            select(func.max(Scenario.batch_number)).where(Scenario.session_id == session_id, Scenario.kind == kind)
+        )
     if latest is None:
         return 1
-    if not batch_is_reviewed(db, session_id, latest):
+    if not batch_is_reviewed(db, session_id, latest, kind):
         raise BatchNotReviewedError(f"Batch {latest} must be fully reviewed before starting another batch.")
     return latest + 1
 
@@ -127,18 +137,23 @@ def next_batch_number(db: Database, session_id: int) -> int:
 # --- scenarios ---------------------------------------------------------------
 
 
+def _next_position(orm: OrmSession, session_id: int, batch: int, kind: ScenarioKind) -> int:
+    used = _batch_scenarios(orm, session_id, batch, kind)
+    if len(used) >= MAX_SCENARIOS_PER_BATCH:
+        what = "smoke-test pages" if kind == ScenarioKind.SMOKE else "scenarios"
+        raise BatchFullError(f"Batch {batch} already has {MAX_SCENARIOS_PER_BATCH} {what}.")
+    return len(used) + 1
+
+
 def add_scenario(
-    db: Database, session_id: int, batch: int, data: ScenarioInput, kind: ScenarioKind = ScenarioKind.SCENARIO
+    db: Database, session_id: int, batch: int, data: ScenarioInput, kind: ScenarioKind = _SCENARIO
 ) -> Scenario:
     data = data.cleaned()
     with db.Session.begin() as orm:
         _get(orm, TestSession, session_id)
-        used = _batch_scenarios(orm, session_id, batch)
-        if len(used) >= MAX_SCENARIOS_PER_BATCH:
-            raise BatchFullError(f"Batch {batch} already has {MAX_SCENARIOS_PER_BATCH} scenarios.")
         scenario = Scenario(
-            session_id=session_id, batch_number=batch, position=len(used) + 1, kind=kind,
-            name=data.name, goal=data.goal, test_data=data.test_data,
+            session_id=session_id, batch_number=batch, position=_next_position(orm, session_id, batch, kind),
+            kind=kind, name=data.name, goal=data.goal, test_data=data.test_data,
         )
         orm.add(scenario)
     return scenario
@@ -153,16 +168,73 @@ def update_scenario(db: Database, scenario_id: int, data: ScenarioInput) -> Scen
 
 
 def delete_scenario(db: Database, scenario_id: int) -> None:
-    """Delete a scenario and close the gap in its batch's positions."""
+    """Delete a scenario (or smoke page) and close the gap in its batch's positions."""
     with db.Session.begin() as orm:
         scenario = _get(orm, Scenario, scenario_id)
-        session_id, batch = scenario.session_id, scenario.batch_number
+        session_id, batch, kind = scenario.session_id, scenario.batch_number, scenario.kind
         orm.delete(scenario)
         orm.flush()
-        for position, other in enumerate(_batch_scenarios(orm, session_id, batch), start=1):
+        for position, other in enumerate(_batch_scenarios(orm, session_id, batch, kind), start=1):
             if other.position != position:
                 other.position = position
                 orm.flush()
+
+
+# --- smoke-test pages ----------------------------------------------------------
+
+
+@dataclass
+class SmokePageInput:
+    page_name: str
+    url: str
+    how_to_reach: str = ""
+    login_needed: bool = False
+    page_information: str = ""
+    expected_elements: str = ""
+
+    def cleaned(self) -> "SmokePageInput":
+        name = self.page_name.strip()
+        if not name:
+            raise ValueError("Page name is required.")
+        url = normalize_url(self.url)
+        if url is None:
+            raise ValueError("Page URL must be a valid http(s) URL.")
+        return SmokePageInput(
+            page_name=name, url=url, how_to_reach=self.how_to_reach.strip(), login_needed=bool(self.login_needed),
+            page_information=self.page_information.strip(), expected_elements=self.expected_elements.strip(),
+        )
+
+    @classmethod
+    def of(cls, page: SmokePage) -> "SmokePageInput":
+        return cls(page.page_name, page.url, page.how_to_reach, page.login_needed, page.page_information,
+                   page.expected_elements)
+
+
+def add_smoke_page(db: Database, session_id: int, batch: int, data: SmokePageInput) -> Scenario:
+    """A smoke test is stored as a scenario of kind smoke with its SmokePage; its checks are steps."""
+    data = data.cleaned()
+    with db.Session.begin() as orm:
+        _get(orm, TestSession, session_id)
+        scenario = Scenario(
+            session_id=session_id, batch_number=batch,
+            position=_next_position(orm, session_id, batch, ScenarioKind.SMOKE), kind=ScenarioKind.SMOKE,
+            name=data.page_name, goal=f"Smoke test of {data.url}",
+        )
+        scenario.smoke_page = SmokePage(**vars(data))
+        orm.add(scenario)
+    return scenario
+
+
+def update_smoke_page(db: Database, scenario_id: int, data: SmokePageInput) -> Scenario:
+    data = data.cleaned()
+    with db.Session.begin() as orm:
+        scenario = _get(orm, Scenario, scenario_id)
+        if scenario.smoke_page is None:
+            raise LookupError(f"Scenario {scenario_id} is not a smoke test")
+        for key, value in vars(data).items():
+            setattr(scenario.smoke_page, key, value)
+        scenario.name, scenario.goal = data.page_name, f"Smoke test of {data.url}"
+    return scenario
 
 
 # --- steps -------------------------------------------------------------------
@@ -249,7 +321,9 @@ def request_rerun(db: Database, step_id: int, comment: str = "") -> Review:
 # --- running -----------------------------------------------------------------
 
 
-def scenarios_to_run(db: Database, session_id: int, batch: int) -> list[tuple[Scenario, bool]]:
+def scenarios_to_run(
+    db: Database, session_id: int, batch: int, kind: ScenarioKind = ScenarioKind.SCENARIO
+) -> list[tuple[Scenario, bool]]:
     """Scenarios in the batch that need a run, with True when it is a re-run.
 
     A scenario needs a run when it has no steps yet, or when any step's latest review
@@ -257,9 +331,8 @@ def scenarios_to_run(db: Database, session_id: int, batch: int) -> list[tuple[Sc
     """
     with db.Session() as orm:
         selected = []
-        for scenario in _batch_scenarios(orm, session_id, batch):
-            if scenario.kind != ScenarioKind.SCENARIO:
-                continue
+        for scenario in _batch_scenarios(orm, session_id, batch, kind):
+            scenario.smoke_page  # load before the ORM session closes
             if not scenario.steps:
                 selected.append((scenario, False))
             elif any(step.rerun_requested for step in scenario.steps):
