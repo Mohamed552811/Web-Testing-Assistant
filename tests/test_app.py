@@ -53,11 +53,13 @@ class MainWindowTests(unittest.TestCase):
         window.show_session(session)
         self.assertTrue(window.export_action.isEnabled())
         out = Path(self.tmp.name) / "out"
-        for fmt in ("xlsx", "pdf", "docx", "md"):
+        for fmt in ("xlsx", "pdf", "docx"):
             self.assertEqual(window.export_report(out / f"r.{fmt}"), out / f"r.{fmt}")
             self.assertTrue((out / f"r.{fmt}").is_file(), fmt)
+        # Markdown writes a folder named after the file and returns its SUMMARY.md.
+        self.assertEqual(window.export_report(out / "r.md"), out / "r" / "SUMMARY.md")
         window.settings.export_format = "md"
-        self.assertEqual(window.export_report(out / "no-extension"), out / "no-extension.md")
+        self.assertEqual(window.export_report(out / "no-extension"), out / "no-extension" / "SUMMARY.md")
         window.deleteLater()
 
     def test_export_from_the_menu(self):

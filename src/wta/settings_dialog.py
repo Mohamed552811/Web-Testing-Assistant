@@ -2,6 +2,7 @@
 
 from PySide6.QtWidgets import (
     QCheckBox,
+    QLineEdit,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -31,7 +32,9 @@ class SettingsDialog(QDialog):
             "Deleting, sending, paying or other irreversible actions. Claude stops and the app asks you."
         )
 
+        self.tester_name = QLineEdit(placeholderText="e.g. Staff QA")
         form = QFormLayout()
+        form.addRow("Tester name", self.tester_name)
         form.addRow("Screenshot timing", self.screenshot_timing)
         form.addRow("Export format", self.export_format)
         form.addRow("Risky actions", self.confirm_risky)
@@ -49,10 +52,12 @@ class SettingsDialog(QDialog):
         self.screenshot_timing.setCurrentIndex(self.screenshot_timing.findData(settings.screenshot_timing))
         self.export_format.setCurrentIndex(self.export_format.findData(settings.export_format))
         self.confirm_risky.setChecked(settings.confirm_risky_actions)
+        self.tester_name.setText(settings.tester_name)
 
     def settings(self) -> Settings:
         return Settings(
             screenshot_timing=self.screenshot_timing.currentData(),
             export_format=self.export_format.currentData(),
             confirm_risky_actions=self.confirm_risky.isChecked(),
+            tester_name=self.tester_name.text(),
         ).cleaned()

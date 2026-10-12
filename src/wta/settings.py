@@ -20,7 +20,7 @@ EXPORT_FORMATS = {
     "xlsx": "Excel (.xlsx)",
     "pdf": "PDF (.pdf)",
     "docx": "Word (.docx)",
-    "md": "Markdown (.md)",
+    "md": "Markdown summary + bug reports (folder)",
 }
 
 
@@ -30,6 +30,8 @@ class Settings:
     export_format: str = "xlsx"
     # Pause before risky actions and ask the user (uses `claude --resume`). Off by default.
     confirm_risky_actions: bool = False
+    # Shown as "Tester" in exported reports.
+    tester_name: str = ""
 
     def cleaned(self) -> "Settings":
         """Unknown values fall back to the defaults."""
@@ -39,6 +41,7 @@ class Settings:
             else default.screenshot_timing,
             export_format=self.export_format if self.export_format in EXPORT_FORMATS else default.export_format,
             confirm_risky_actions=bool(self.confirm_risky_actions),
+            tester_name=self.tester_name.strip()[:100],
         )
 
 

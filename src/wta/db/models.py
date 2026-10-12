@@ -95,6 +95,9 @@ class TestSession(Base):
     # Test-environment account only; stays in this local database.
     test_account_email: Mapped[str | None] = mapped_column(String(320))
     test_account_password: Mapped[str | None] = mapped_column(Text)
+    # For the exported summary report.
+    application: Mapped[str | None] = mapped_column(String(200))
+    test_scope: Mapped[str | None] = mapped_column(Text)  # one item per line
 
     scenarios: Mapped[list["Scenario"]] = relationship(
         back_populates="session",

@@ -12,14 +12,17 @@ from wta.export.xlsx import write_xlsx
 WRITERS = {"xlsx": write_xlsx, "pdf": write_pdf, "docx": write_docx, "md": write_markdown}
 
 
-def export_report(db: Database, session_id: int, path: Path, fmt: str | None = None) -> Path:
-    """Write the session's report. The format comes from `fmt` or the file extension."""
+def export_report(db: Database, session_id: int, path: Path, fmt: str | None = None, tester: str = "") -> Path:
+    """Write the session's report. The format comes from `fmt` or the file extension.
+
+    Markdown writes a folder (SUMMARY.md, one BUG-NNN-<title>.md per bug, screenshots) and
+    returns the path of SUMMARY.md."""
     fmt = (fmt or path.suffix.lstrip(".")).lower()
     if fmt not in WRITERS:
         raise ValueError(f"Unknown export format: {fmt!r}")
     if path.suffix.lower() != f".{fmt}":
         path = path.with_suffix(f".{fmt}")
-    return WRITERS[fmt](build_report(db, session_id), path)
+    return WRITERS[fmt](build_report(db, session_id, tester), path)
 
 
 __all__ = ["Report", "WRITERS", "build_report", "export_report"]

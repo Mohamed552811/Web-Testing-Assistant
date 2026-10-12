@@ -56,6 +56,11 @@ class SessionDialog(QDialog):
         form.addRow("Viewport", viewport)
         form.addRow("Test account email", self.email)
         form.addRow("Test account password", self.password)
+        self.application = QLineEdit(placeholderText="e.g. Amnivo ERP - Sales Order Module")
+        self.test_scope = QPlainTextEdit(placeholderText="What this session covers, one item per line")
+        self.test_scope.setFixedHeight(70)
+        form.addRow("Application", self.application)
+        form.addRow("Test scope", self.test_scope)
         note = QLabel("Test environment accounts only. Stored in the local database on this machine.")
         note.setWordWrap(True)
         note.setStyleSheet("color: gray;")
@@ -77,6 +82,8 @@ class SessionDialog(QDialog):
             self.viewport_height.setValue(details.viewport_height)
             self.email.setText(details.test_account_email)
             self.password.setText(details.test_account_password)
+            self.application.setText(details.application)
+            self.test_scope.setPlainText(details.test_scope)
 
     def accept(self) -> None:
         details = store.SessionDetails(
@@ -87,6 +94,8 @@ class SessionDialog(QDialog):
             viewport_height=self.viewport_height.value(),
             test_account_email=self.email.text(),
             test_account_password=self.password.text(),
+            application=self.application.text(),
+            test_scope=self.test_scope.toPlainText(),
         )
         try:
             self._result = store.validate(details)

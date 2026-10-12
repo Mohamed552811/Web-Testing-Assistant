@@ -40,6 +40,7 @@ class ExportTests(unittest.TestCase):
         cls.db = Database(cls.base / "wta.sqlite3")
         session = store.create_session(cls.db, store.SessionDetails(
             name="Shop | checkout", target_url="https://shop.example.com", test_account_email="qa@shop.example.com",
+            application="Shop web app", test_scope="Checkout\n  \nCart",
             test_account_password=PASSWORD))
         cls.session_id = session.id
         bug_png = make_png(cls.base / "bug.png")
@@ -93,14 +94,14 @@ class ExportTests(unittest.TestCase):
         self.assertEqual([(b.title, b.review_state) for b in r.bugs],
                          [("Payment fails", "Confirmed"), ("No empty-cart message", "Not reviewed yet")])
         self.assertIn("Expected: Order placed", r.bugs[0].tfs_repro_steps)
-        # Test-account details never leave the machine in a report (case-insensitive).
-        self.assertIn("1. Sign in as the test account", r.bugs[0].repro_steps)
+        # The password never leaves the machine in a report; the account email may (the user's reports name it).
+        self.assertIn("1. Sign in as QA@shop.example.com", r.bugs[0].repro_steps)
         self.assertEqual(r.bugs[0].report_text, "Full report (typed the test password by mistake)")
+        self.assertEqual(r.test_account_email, "qa@shop.example.com")
         self.assertEqual(len(r.bugs[0].screenshots), 1)
 
     def no_secrets(self, data: bytes, what: str):
         self.assertNotIn(PASSWORD.encode(), data, what)
-        self.assertNotIn(b"qa@shop.example.com", data, what)
 
     # formats
 
@@ -151,17 +152,61 @@ class ExportTests(unittest.TestCase):
         self.assertNotIn(PASSWORD, text)
         document.close()
 
-    def test_markdown(self):
-        path = export_report(self.db, self.session_id, self.base / "out" / "report.md")
-        text = path.read_text("utf-8")
-        self.assertTrue(text.startswith("# Test report — Shop | checkout\n"))  # headings need no escaping
-        self.assertIn("| ok \\| fine |", text)  # a pipe inside a table cell is escaped
-        self.assertIn("### 1. Payment fails", text)
-        links = [line.split("](")[1].rstrip(")") for line in text.splitlines() if line.startswith("![")]
-        self.assertEqual(len(links), 2)
-        for link in links:
-            self.assertTrue((path.parent / link).is_file(), link)  # copied next to the report
-        self.no_secrets(text.encode(), "markdown")
+    def test_markdown_summary_and_bug_files(self):
+        summary = export_report(self.db, self.session_id, self.base / "out" / "report.md", tester="Staff QA")
+        folder = self.base / "out" / "report"
+        self.assertEqual(summary, folder / "SUMMARY.md")
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), [
+            "BUG-001-payment-fails.md", "BUG-001-screenshot.png", "BUG-002-no-empty-cart-message.md", "SUMMARY.md",
+            "TC001-step-4.png",
+        ])
+        text = summary.read_text("utf-8")
+        for needle in (
+            "# Shop | checkout Test Report", "## Test Information", "- **Tester:** Staff QA",
+            "- **Application:** Shop web app", "- **URL:** https://shop.example.com",
+            "- **User:** qa@shop.example.com", "## Test Scope\n- Checkout\n- Cart",
+            "### Test Case 001: Checkout", "| Test Step | Expected Result | Actual Result | Status |",
+            "| Open shop |  | ok \\| fine | PASS |", "| Pay |  | 500 error | FAIL |",
+            "| Coupon |  |  | PASS |",  # the override wins
+            "| Track order |  |  | BLOCKED (not reviewed) |",
+            "### Smoke Test 002: Cart page", "| Empty cart message |  |  | FAIL (not reviewed) |",
+            "## Overall Test Result\n**FAIL (2 steps not reviewed yet)**",
+            "## Key Findings\n\n## Bugs Found",
+            "| [BUG-001](BUG-001-payment-fails.md) | Payment fails | High | Open |",
+            "| [BUG-002](BUG-002-no-empty-cart-message.md) | No empty-cart message | Medium | Open (not reviewed) |",
+            "## Recommendations\n\n## Attachments",
+            "- BUG-001-screenshot.png - Checkout, step 2: 500 error",
+            "- TC001-step-4.png - Checkout, step 4: Track order",
+        ):
+            self.assertIn(needle, text)
+        self.assertNotIn("False alarm", text)  # overridden to Pass: no bug
+
+        bug = (folder / "BUG-001-payment-fails.md").read_text("utf-8")
+        for needle in (
+            "# BUG-001: Payment fails", "## Severity: High",
+            "## Summary\nFull report (typed the test password by mistake)",
+            "## Environment\n- **URL:** https://shop.example.com", "- **User:** qa@shop.example.com",
+            "## Steps to Reproduce\n1. Sign in as QA@shop.example.com\n2. Add item\n3. Pay",
+            "## Expected Behavior\n- Order placed", "## Actual Behavior\n- 500 error",
+            "## Screenshots\n- See: BUG-001-screenshot.png (Checkout, step 2: 500 error)",
+            "## Impact\n\n## Notes\n- Review: real bug",
+        ):
+            self.assertIn(needle, bug)
+        for f in folder.glob("*.md"):
+            self.no_secrets(f.read_bytes(), f.name)
+
+    def test_markdown_slug_and_reexport(self):
+        from wta.export.markdown import severity_word, slug
+        self.assertEqual(slug('Price List "strawberry export pl 2" Not Found in New Sales Order'),
+                         "price-list-strawberry-export-pl-2-not-found-in-new")
+        self.assertEqual(slug("!!!"), "bug")
+        self.assertEqual(severity_word("2 - High"), "High")
+        # Exporting again to the same name replaces the folder instead of mixing old files in.
+        target = self.base / "again" / "r.md"
+        export_report(self.db, self.session_id, target)
+        (target.with_suffix("") / "stale.txt").write_text("old")
+        export_report(self.db, self.session_id, target)
+        self.assertFalse((target.with_suffix("") / "stale.txt").exists())
 
     def test_unknown_format(self):
         with self.assertRaises(ValueError):
@@ -211,9 +256,26 @@ class SettingsTests(unittest.TestCase):
             path.write_text('{"screenshot_timing": "sometimes", "export_format": "odt"}', "utf-8")
             self.assertEqual(app_settings.load(path), app_settings.Settings())
 
+    def test_tester_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            app_settings.save(path, app_settings.Settings(tester_name="  Staff QA  "))
+            self.assertEqual(app_settings.load(path).tester_name, "Staff QA")
+
+    def test_session_application_and_scope(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "w.sqlite3")
+            try:
+                s = store.create_session(db, store.SessionDetails(
+                    name="S", target_url="https://a.example.com", application=" ERP ", test_scope="One\n\n Two \n"))
+                details = store.details_of(store.load_session(db, s.id))
+                self.assertEqual((details.application, details.test_scope), ("ERP", "One\nTwo"))
+            finally:
+                db.close()
+
     def test_dialog_round_trip(self):
-        dialog = SettingsDialog(app_settings.Settings("once_per_smoke_page", "docx", True))
-        self.assertEqual(dialog.settings(), app_settings.Settings("once_per_smoke_page", "docx", True))
+        dialog = SettingsDialog(app_settings.Settings("once_per_smoke_page", "docx", True, "Staff QA"))
+        self.assertEqual(dialog.settings(), app_settings.Settings("once_per_smoke_page", "docx", True, "Staff QA"))
         dialog.export_format.setCurrentIndex(dialog.export_format.findData("md"))
         self.assertEqual(dialog.settings().export_format, "md")
         dialog.deleteLater()

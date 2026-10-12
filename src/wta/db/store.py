@@ -22,6 +22,8 @@ class SessionDetails:
     viewport_height: int = 800
     test_account_email: str = ""
     test_account_password: str = ""
+    application: str = ""
+    test_scope: str = ""
 
 
 def parse_domains(text: str) -> list[str]:
@@ -60,6 +62,8 @@ def validate(details: SessionDetails) -> SessionDetails:
         viewport_height=details.viewport_height,
         test_account_email=details.test_account_email.strip(),
         test_account_password=details.test_account_password,
+        application=details.application.strip(),
+        test_scope="\n".join(line.strip() for line in details.test_scope.splitlines() if line.strip()),
     )
 
 
@@ -71,6 +75,8 @@ def _apply(session: TestSession, details: SessionDetails) -> None:
     session.viewport_height = details.viewport_height
     session.test_account_email = details.test_account_email or None
     session.test_account_password = details.test_account_password or None
+    session.application = details.application or None
+    session.test_scope = details.test_scope or None
 
 
 def create_session(db: Database, details: SessionDetails, browser_version: str | None = None) -> TestSession:
@@ -130,4 +136,6 @@ def details_of(session: TestSession) -> SessionDetails:
         viewport_height=session.viewport_height,
         test_account_email=session.test_account_email or "",
         test_account_password=session.test_account_password or "",
+        application=session.application or "",
+        test_scope=session.test_scope or "",
     )

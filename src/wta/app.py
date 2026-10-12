@@ -198,7 +198,7 @@ class MainWindow(QMainWindow):
             path = Path(chosen)
             fmt = chosen_filter.rsplit("*.", 1)[-1].rstrip(")") if chosen_filter else fmt
         try:
-            written = export_report(self.db, self.current_session.id, path, fmt)
+            written = export_report(self.db, self.current_session.id, path, fmt, self.settings.tester_name)
         except (OSError, ValueError) as exc:
             QMessageBox.warning(self, "Export report", f"Could not export the report:\n{exc}")
             return None

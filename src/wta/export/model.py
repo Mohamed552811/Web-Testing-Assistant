@@ -1,7 +1,8 @@
 """The report data every export format is built from.
 
 It reads the database once. Each row carries both Claude's status and the user's reviewed
-final status, so a report never hides what Claude found. The test account is never included.
+final status, so a report never hides what Claude found. The test account email may appear
+(the user's reports name the account); the password never does.
 """
 
 import re
@@ -61,6 +62,8 @@ class BugRow:
     review_state: str
     page_url: str
     screenshots: list[Path]
+    step_action: str = ""
+    review_comment: str = ""
 
     @property
     def tfs_repro_steps(self) -> str:
@@ -87,6 +90,11 @@ class Report:
     rows: list[StepRow]
     bugs: list[BugRow]
     counts: dict[str, Counter] = field(default_factory=dict)  # kind label -> final_key -> n
+    application: str = ""
+    test_scope: list[str] = field(default_factory=list)
+    test_account_email: str = ""
+    tester: str = ""
+    last_run_at: str = ""  # local date and time of the latest run, "" if never run
     run_count: int = 0
     output_tokens: int = 0
     five_hour_latest: float | None = None
@@ -111,12 +119,11 @@ def _final(step: Step, labels: dict) -> tuple[str, str, str, str, str]:
     return labels[review.final_status], key, decision, review.comment, when
 
 
-ACCOUNT_PLACEHOLDER = "the test account"
 PASSWORD_PLACEHOLDER = "the test password"
 
 
 def _redact_rows(items: list, replacements: list[tuple[str, str]]) -> None:
-    """Replace test-account details in every text field. Reports are handed over; the account stays local."""
+    """Replace secrets (the test password) in every text field. Reports are handed over; the password stays local."""
     if not replacements:
         return
     pattern = re.compile("|".join(re.escape(old) for old, _ in replacements), re.IGNORECASE)
@@ -134,7 +141,7 @@ def _redact_rows(items: list, replacements: list[tuple[str, str]]) -> None:
                 setattr(item, f.name, [clean(v) for v in value])
 
 
-def build_report(db: Database, session_id: int) -> Report:
+def build_report(db: Database, session_id: int, tester: str = "") -> Report:
     session = store.load_session(db, session_id)
     rows: list[StepRow] = []
     bugs: list[BugRow] = []
@@ -170,12 +177,10 @@ def build_report(db: Database, session_id: int) -> Report:
                     expected=bug.expected, actual=bug.actual, report_text=bug.report_text, kind=kind,
                     scenario=scenario.name, step_order=step.order, review_state=state,
                     page_url=capture.page_url if capture else "", screenshots=shots,
+                    step_action=step.action, review_comment=comment,
                 ))
 
-    replacements = [(secret, label) for secret, label in (
-        (session.test_account_password or "", PASSWORD_PLACEHOLDER),
-        (session.test_account_email or "", ACCOUNT_PLACEHOLDER),
-    ) if secret]
+    replacements = [(session.test_account_password, PASSWORD_PLACEHOLDER)] if session.test_account_password else []
     _redact_rows(rows + bugs, replacements)
 
     runs = run_store.list_runs(db, session_id)
@@ -195,6 +200,11 @@ def build_report(db: Database, session_id: int) -> Report:
         output_tokens=sum(r.output_tokens or 0 for r in runs),
         five_hour_latest=latest.five_hour_seen if latest else None,
         seven_day_latest=latest.seven_day_seen if latest else None,
+        application=session.application or "",
+        test_scope=[line for line in (session.test_scope or "").splitlines() if line.strip()],
+        test_account_email=session.test_account_email or "",
+        tester=tester,
+        last_run_at=_local(runs[0].started_at) if runs else "",
     )
 
 

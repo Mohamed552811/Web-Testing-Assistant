@@ -14,7 +14,7 @@ credentials or OAuth tokens, never call Anthropic usage endpoints.
 - Claude only acts on domains I allow.
 - A Stop button kills the Claude Code process. Confirmation before risky actions is an optional setting, off by default.
 - Close all browsers: only close browsers the app or Playwright started. Run them with a dedicated profile folder and track process IDs. Never find or kill browsers by program name.
-- Test account details stay in the local database on this machine only.
+- Test account details stay in the local database on this machine only. Exception (decided 2026-10-12): the test account email may appear in exported reports; the password never does.
 - Show plan usage only from data Claude Code itself provides.
 - Keep the Claude launcher in one module so it is easy to change later.
 - Small commits, a test for each non-trivial module, no features beyond the current phase, ask me before adding dependencies you were not told about.

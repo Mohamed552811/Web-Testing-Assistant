@@ -50,8 +50,11 @@ This installs PySide6, SQLAlchemy, openpyxl and python-docx. The first test run 
 3. **Live run tab**: follow each action, what Claude saw and its notes. **Stop** ends the run at once.
 4. Review every step: **Approve**, **Override** the status, add a comment, or **Request re-run**. A step is final only after your review.
 5. **Runs tab**: reopen past runs and their traces, and write **site notes**. Notes are added to the next run's prompt for that site.
-6. **Session → Export report** (Ctrl+E): Excel, PDF, Word or Markdown. The Bugs sheet uses Azure DevOps / TFS field names.
-7. **Session → Settings** (Ctrl+,): screenshot timing, default export format, and "pause before risky actions" (off by default).
+6. **Session → Export report** (Ctrl+E): Excel, PDF, Word or Markdown.
+   - Excel's Bugs sheet uses Azure DevOps / TFS field names, so it can be imported.
+   - Markdown writes a folder with `SUMMARY.md` (test information, scope, results per test case, overall result, bugs found, attachments), one `BUG-NNN-<title>.md` per bug, and the screenshots. Key Findings, Recommendations, Impact and Notes are left empty for you to fill in.
+   - Application and Test scope come from the session form; Tester comes from Settings.
+7. **Session → Settings** (Ctrl+,): tester name, screenshot timing, default export format, and "pause before risky actions" (off by default).
 
 The bar at the top shows Claude Code sign-in and your 5-hour and weekly plan usage. Usage is updated during test runs from data Claude Code reports.
 
@@ -61,7 +64,7 @@ The bar at the top shows Claude Code sign-in and your 5-hour and weekly plan usa
 - During a run the embedded browser refuses to open pages outside the session's allowed domains.
 - Page content is treated as data. Instructions found on a page are ignored and reported as notices.
 - **Close all browsers** stops any run and closes every process the app started, tracked by process ID. It never touches your own browsers. It also runs when the app closes.
-- The test account stays in the local database. The password is redacted from run files, and both the password and the account email are removed from exported reports.
+- The test account stays in the local database. The password is redacted from run files and exported reports; the account email may appear in exported reports.
 
 ## Where data lives
 
