@@ -38,6 +38,7 @@ DECISION_LABELS = {
 
 class ScenarioTab(QWidget):
     status_message = Signal(str)
+    run_requested = Signal(int)  # batch number
 
     def __init__(self, db: Database, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -48,11 +49,15 @@ class ScenarioTab(QWidget):
         # Batch row
         self.batch_combo = QComboBox()
         self.new_batch_button = QPushButton("New batch…")
+        self.run_button = QPushButton("Run batch")
+        self.run_button.setToolTip("Run Claude Code on scenarios in this batch that have no results or need a re-run")
+        self.run_button.setStyleSheet("font-weight: bold;")
         batch_row = QHBoxLayout()
         batch_row.addWidget(QLabel("Batch"))
         batch_row.addWidget(self.batch_combo)
         batch_row.addWidget(self.new_batch_button)
         batch_row.addStretch(1)
+        batch_row.addWidget(self.run_button)
 
         # Scenarios
         self.scenario_list = QListWidget()
@@ -136,6 +141,7 @@ class ScenarioTab(QWidget):
 
         self.batch_combo.currentIndexChanged.connect(self._on_batch_chosen)
         self.new_batch_button.clicked.connect(self.start_new_batch)
+        self.run_button.clicked.connect(lambda: self.run_requested.emit(self.batch))
         self.scenario_list.currentRowChanged.connect(lambda _row: self._load_steps())
         self.scenario_list.itemDoubleClicked.connect(lambda _item: self.edit_scenario())
         self.add_scenario_button.clicked.connect(self.add_scenario)
@@ -151,6 +157,28 @@ class ScenarioTab(QWidget):
         self.rerun_button.clicked.connect(self.request_rerun)
 
         self.set_session(None)
+
+    # --- running ---------------------------------------------------------------
+
+    def set_run_state(self, allowed: bool, running: bool, reason: str = "") -> None:
+        """Enable "Run batch" only when runs are allowed and none is in progress."""
+        self.run_button.setEnabled(allowed and not running)
+        self.run_button.setText("Running…" if running else "Run batch")
+        self.run_button.setToolTip(reason or "Run Claude Code on scenarios in this batch that have no results or need a re-run")
+        # Editing the batch while Claude writes results into it would be confusing.
+        self.new_batch_button.setEnabled(not running)
+        self.batch_combo.setEnabled(not running)
+        if running:
+            self.add_scenario_button.setEnabled(False)
+            self.remove_scenario_button.setEnabled(False)
+        else:
+            self._load_scenarios()  # recomputes the scenario buttons (e.g. batch full)
+
+    def refresh(self, scenario_id: int | None = None) -> None:
+        """Reload after results changed; keeps the current selection."""
+        current = self._current_scenario()
+        if scenario_id is None or (current is not None and current.id == scenario_id):
+            self._load_steps()
 
     # --- session and batch ---------------------------------------------------
 

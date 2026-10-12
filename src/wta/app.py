@@ -1,33 +1,76 @@
 """Application entry point and main window."""
 
 import sys
+import threading
+from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtCore import QObject, Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWebEngineCore import QWebEngineProfile, qWebEngineChromiumVersion
-from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QMessageBox, QSplitter, QTabWidget
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QMainWindow,
+    QMessageBox,
+    QSplitter,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from wta import __version__
 from wta import cdp
 from wta.browser import BrowserPane, make_profile
 from wta.connection_dialog import ConnectionDialog
 from wta.db import Database, store
+from wta.db import scenarios as sc
 from wta.db.models import TestSession
 from wta.paths import data_dir, database_path
+from wta.prompt import RunContext
+from wta.run_panel import RunPanel
+from wta.runner import BatchRun, RunOutcome, ScenarioJob, default_runs_dir, run_folder
 from wta.scenario_tab import ScenarioTab
 from wta.session_dialogs import OpenSessionDialog, SessionDialog
+from wta.usage_bar import TopBar
 
 APP_TITLE = "Web Testing Assistant"
 START_PAGE = "about:blank"
+USAGE_FILE = "usage.json"
+CDP_CHECK_ATTEMPTS = 4
+
+
+class _CdpChecker(QObject):
+    """Checks the debugging endpoint on a worker thread (see wta.cdp for why)."""
+
+    done = Signal(object)  # dict | None
+
+    def run(self, port: int) -> None:
+        threading.Thread(target=lambda: self.done.emit(cdp.endpoint_info(port, timeout=3)), daemon=True).start()
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, db: Database, profile: QWebEngineProfile | None = None, cdp_port: int | None = None) -> None:
+    def __init__(
+        self,
+        db: Database,
+        profile: QWebEngineProfile | None = None,
+        cdp_port: int | None = None,
+        app_dir: Path | None = None,
+        check_sign_in: bool = True,
+    ) -> None:
         super().__init__()
         self.db = db
         self.cdp_port = cdp_port
+        self.app_dir = app_dir or data_dir()
         self.current_session: TestSession | None = None
+        self.batch_run: BatchRun | None = None
+        self.cdp_info: dict | None = None
+        self._cdp_attempts = 0
+        self._cdp_checker = _CdpChecker(self)
+        self._cdp_checker.done.connect(self._on_cdp_checked)
         self.resize(1600, 940)
+
+        self.top_bar = TopBar(self.app_dir / USAGE_FILE, self)
+        self.top_bar.sign_in_changed.connect(lambda _ok: self._update_run_state())
 
         self.browser = BrowserPane(self, profile)
         self.browser.view.load(QUrl(START_PAGE))
@@ -35,19 +78,32 @@ class MainWindow(QMainWindow):
 
         self.scenario_tab = ScenarioTab(db, self)
         self.scenario_tab.status_message.connect(self.statusBar().showMessage)
+        self.scenario_tab.run_requested.connect(self.run_batch)
+        self.run_panel = RunPanel(self)
         self.tabs = QTabWidget()
         self.tabs.addTab(self.scenario_tab, "Scenarios")
+        self.tabs.addTab(self.run_panel, "Live run")
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.browser)
         splitter.addWidget(self.tabs)
         splitter.setSizes([850, 750])
-        self.setCentralWidget(splitter)
+
+        central = QWidget()
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.top_bar)
+        layout.addWidget(splitter, 1)
+        self.setCentralWidget(central)
 
         self._build_menu()
         self._update_title()
+        self._update_run_state()
         if cdp_port is not None:
-            QTimer.singleShot(1500, self._check_cdp)
+            QTimer.singleShot(1000, self._check_cdp)
+        if check_sign_in:
+            self.top_bar.check_sign_in()
 
     def _build_menu(self) -> None:
         menu = self.menuBar().addMenu("&Session")
@@ -72,7 +128,15 @@ class MainWindow(QMainWindow):
         browser_menu.addAction(self.connection_action)
 
     def _check_cdp(self) -> None:
-        if cdp.endpoint_info(self.cdp_port) is None:
+        self._cdp_attempts += 1
+        self._cdp_checker.run(self.cdp_port)
+
+    def _on_cdp_checked(self, info: dict | None) -> None:
+        self.cdp_info = info
+        if info is None and self._cdp_attempts < CDP_CHECK_ATTEMPTS:
+            QTimer.singleShot(2000, self._check_cdp)
+            return
+        if info is None:
             QMessageBox.warning(
                 self,
                 "Browser debugging port",
@@ -81,14 +145,18 @@ class MainWindow(QMainWindow):
             )
         else:
             self.statusBar().showMessage(f"Browser debugging on {cdp.endpoint_url(self.cdp_port)}", 5000)
+        self._update_run_state()
 
     def show_connection(self) -> None:
-        base = data_dir()
-        ConnectionDialog(self.cdp_port, base / "mcp" / "playwright-mcp.json", base / "manual-run", self).exec()
+        ConnectionDialog(
+            self.cdp_port, self.cdp_info, self.app_dir / "mcp" / "playwright-mcp.json", self.app_dir / "manual-run", self
+        ).exec()
 
     def _update_title(self) -> None:
         suffix = f" — {self.current_session.name}" if self.current_session else ""
         self.setWindowTitle(f"{APP_TITLE} {__version__}{suffix}")
+
+    # --- sessions ----------------------------------------------------------------
 
     def new_session(self) -> None:
         dialog = SessionDialog(self)
@@ -118,12 +186,114 @@ class MainWindow(QMainWindow):
 
     def show_session(self, session: TestSession) -> None:
         self.current_session = session
-        self.details_action.setEnabled(True)
         self._update_title()
         self.scenario_tab.set_session(session.id)
         self.browser.set_viewport(session.viewport_width, session.viewport_height)
         self.browser.view.load(QUrl(session.target_url))
         self.statusBar().showMessage(f"Opened session “{session.name}”")
+        self._update_run_state()
+
+    # --- running -----------------------------------------------------------------
+
+    def _run_blocker(self) -> str:
+        """Why a run cannot start now, or "" when it can."""
+        if self.current_session is None:
+            return "Open a session first."
+        if not self.top_bar.signed_in:
+            return "Claude Code must be installed and signed in (see the top bar)."
+        if self.cdp_port is None:
+            return "The embedded browser has no debugging port."
+        if self.cdp_info is None:
+            if self._cdp_attempts < CDP_CHECK_ATTEMPTS:
+                return "Checking the embedded browser's debugging port…"
+            return "The embedded browser's debugging port is not available. Restart the app."
+        return ""
+
+    def _update_run_state(self) -> None:
+        running = self.batch_run is not None
+        blocker = "" if running else self._run_blocker()
+        self.scenario_tab.set_run_state(allowed=not blocker, running=running, reason=blocker)
+        self.new_action.setEnabled(not running)
+        self.open_action.setEnabled(not running)
+        self.details_action.setEnabled(not running and self.current_session is not None)
+
+    def run_batch(self, batch: int) -> None:
+        blocker = self._run_blocker()
+        if blocker:
+            QMessageBox.information(self, "Run batch", blocker)
+            return
+        session = store.load_session(self.db, self.current_session.id)
+        selected = sc.scenarios_to_run(self.db, session.id, batch)
+        if not selected:
+            QMessageBox.information(
+                self,
+                "Run batch",
+                "Nothing to run: every scenario in this batch already has results.\n"
+                "Use “Request re-run” on a step to run its scenario again.",
+            )
+            return
+        reruns = [scenario.name for scenario, rerun in selected if rerun]
+        if reruns:
+            answer = QMessageBox.question(
+                self,
+                "Re-run scenarios",
+                "These scenarios will run again. Claude's new results replace its earlier ones; "
+                "your reviews are kept.\n\n• " + "\n• ".join(reruns),
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+
+        runs_dir = default_runs_dir(self.app_dir)
+        jobs = [
+            ScenarioJob(
+                scenario_id=scenario.id,
+                title=scenario.name,
+                run_dir=run_folder(runs_dir, session.id, batch, scenario.position),
+                context=RunContext(
+                    session_name=session.name,
+                    target_url=session.target_url,
+                    allowed_domains=list(session.allowed_domains),
+                    test_account_email=session.test_account_email or "",
+                    test_account_password=session.test_account_password or "",
+                    scenario_name=scenario.name,
+                    scenario_goal=scenario.goal,
+                    scenario_test_data=scenario.test_data,
+                ),
+            )
+            for scenario, _rerun in selected
+        ]
+        self.batch_run = BatchRun(self.db, jobs, self.cdp_port, self.app_dir / USAGE_FILE, self)
+        self.batch_run.scenario_started.connect(self.run_panel.scenario_started)
+        self.batch_run.event.connect(self.run_panel.add_event)
+        self.batch_run.results_changed.connect(self.scenario_tab.refresh)
+        self.batch_run.usage_changed.connect(lambda _state: self.top_bar.refresh_usage())
+        self.batch_run.scenario_finished.connect(self._scenario_finished)
+        self.batch_run.all_finished.connect(self._batch_finished)
+        self.run_panel.clear()
+        self.tabs.setCurrentWidget(self.run_panel)
+        self._update_run_state()
+        self.batch_run.start()
+
+    def _scenario_finished(self, outcome: RunOutcome) -> None:
+        title = next((j.title for j in self.batch_run.jobs if j.scenario_id == outcome.scenario_id), "Scenario")
+        self.run_panel.scenario_finished(outcome, title)
+        self.scenario_tab.refresh(outcome.scenario_id)
+
+    def _batch_finished(self) -> None:
+        self.run_panel.all_finished()
+        self.batch_run.deleteLater()
+        self.batch_run = None
+        self._update_run_state()
+        self.statusBar().showMessage("Run finished. Review each step on the Scenarios tab.")
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if self.batch_run is not None:
+            answer = QMessageBox.question(self, "Quit", "A test run is in progress. Stop it and quit?")
+            if answer != QMessageBox.StandardButton.Yes:
+                event.ignore()
+                return
+            self.batch_run.kill()
+        super().closeEvent(event)
 
 
 def main(argv: list[str] | None = None) -> int:

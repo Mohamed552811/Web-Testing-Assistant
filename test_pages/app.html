@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Acme Notes (test app)</title>
+<link rel="icon" href="data:,">
+<style>
+  body { font-family: sans-serif; margin: 0; }
+  header { background: #234; color: #fff; padding: 12px 24px; display: flex; gap: 24px; align-items: center; }
+  header a { color: #9cf; }
+  main { padding: 24px; max-width: 520px; }
+  label { display: block; margin-top: 12px; }
+  input { font-size: 16px; padding: 6px; width: 100%; box-sizing: border-box; }
+  button { margin-top: 16px; font-size: 16px; padding: 6px 16px; }
+  .error { color: #b00; margin-top: 12px; }
+  .ok { color: #070; margin-top: 12px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<!-- Local test app for Web Testing Assistant. Profile save has a deliberate bug. -->
+<header id="top" hidden>
+  <strong id="welcome"></strong>
+  <a href="#home">Home</a>
+  <a href="#profile">Profile</a>
+  <a href="#logout" id="logout">Sign out</a>
+</header>
+<main>
+  <section id="login-view">
+    <h1>Sign in to Acme Notes</h1>
+    <form id="login-form">
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="username">
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password">
+      <button type="submit">Sign in</button>
+    </form>
+    <div id="login-error" class="error" role="alert"></div>
+  </section>
+
+  <section id="home-view" hidden>
+    <h1>Your notes</h1>
+    <ul><li>Quarterly planning</li><li>Team offsite ideas</li></ul>
+  </section>
+
+  <section id="profile-view" hidden>
+    <h1>Profile</h1>
+    <label for="display-name">Display name</label>
+    <input id="display-name">
+    <button id="save">Save</button>
+    <div id="profile-msg" class="ok" role="status"></div>
+  </section>
+</main>
+<script>
+  const state = { user: null, displayName: "Sam Tester" };
+  let account = null;
+  fetch("test-account.json").then(r => r.json()).then(a => { account = a; });
+
+  function show(view) {
+    for (const id of ["login-view", "home-view", "profile-view"]) {
+      document.getElementById(id).hidden = id !== view;
+    }
+    document.getElementById("top").hidden = !state.user;
+    document.getElementById("welcome").textContent = state.user ? "Welcome, " + state.displayName : "";
+  }
+
+  function route() {
+    const hash = location.hash || "#home";
+    if (hash === "#logout") { state.user = null; location.hash = ""; return show("login-view"); }
+    if (!state.user) return show("login-view");
+    if (hash === "#profile") {
+      document.getElementById("display-name").value = state.displayName;
+      document.getElementById("profile-msg").textContent = "";
+      return show("profile-view");
+    }
+    show("home-view");
+  }
+
+  document.getElementById("login-form").addEventListener("submit", e => {
+    e.preventDefault();
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+    if (account && email === account.email && password === account.password) {
+      state.user = email;
+      document.getElementById("login-error").textContent = "";
+      location.hash = "#home";
+      route();
+    } else {
+      document.getElementById("login-error").textContent = "Invalid email or password.";
+    }
+  });
+
+  document.getElementById("save").addEventListener("click", () => {
+    const newName = document.getElementById("display-name").value;
+    // Deliberate bug: the new name is never stored, and the confirmation shows the old one.
+    console.error("TypeError: Cannot read properties of undefined (reading 'displayName') at saveProfile");
+    document.getElementById("profile-msg").textContent = "Profile saved. Display name: " + state.displayName;
+    void newName;
+  });
+
+  window.addEventListener("hashchange", route);
+  route();
+</script>
+</body>
+</html>

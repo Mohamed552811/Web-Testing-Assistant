@@ -23,7 +23,7 @@ class MainWindowTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_builds_and_applies_session_viewport(self):
-        window = MainWindow(self.db)
+        window = MainWindow(self.db, app_dir=Path(self.tmp.name), check_sign_in=False)
         self.assertFalse(window.connection_action.isEnabled())  # no debugging port given
         session = store.create_session(
             self.db,
@@ -32,6 +32,9 @@ class MainWindowTests(unittest.TestCase):
         window.show_session(session)
         self.assertEqual(window.browser.view.size().toTuple(), (1024, 600))
         self.assertIn("S", window.windowTitle())
+        # Sign-in check skipped and no debug port: running is blocked, with the reason shown.
+        self.assertFalse(window.scenario_tab.run_button.isEnabled())
+        self.assertIn("signed in", window.scenario_tab.run_button.toolTip())
         window.deleteLater()
 
 
