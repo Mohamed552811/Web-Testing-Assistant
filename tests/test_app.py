@@ -9,7 +9,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if os.name == "nt":  # the offscreen platform has no fonts of its own; text would render as boxes
     os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"))
 
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from unittest import mock  # noqa: E402
+
+from PySide6.QtWidgets import QApplication, QFileDialog  # noqa: E402
+
+from wta.settings_dialog import SettingsDialog  # noqa: E402
 
 from wta import processes  # noqa: E402
 from wta.app import MainWindow  # noqa: E402
@@ -54,6 +58,25 @@ class MainWindowTests(unittest.TestCase):
             self.assertTrue((out / f"r.{fmt}").is_file(), fmt)
         window.settings.export_format = "md"
         self.assertEqual(window.export_report(out / "no-extension"), out / "no-extension.md")
+        window.deleteLater()
+
+    def test_export_from_the_menu(self):
+        """The real path a user takes: Session > Export report… (triggered passes `checked`)."""
+        window = MainWindow(self.db, app_dir=Path(self.tmp.name), check_sign_in=False)
+        window.show_session(store.create_session(self.db, store.SessionDetails(name="S", target_url="https://a.example.com")))
+        target = Path(self.tmp.name) / "menu" / "report.xlsx"
+        target.parent.mkdir()
+        shown = []
+        with mock.patch.object(QFileDialog, "getSaveFileName", return_value=(str(target), "Excel (.xlsx) (*.xlsx)")) as ask, \
+                mock.patch.object(window, "_show_exported", side_effect=shown.append):
+            window.export_action.trigger()
+        ask.assert_called_once()
+        self.assertTrue(target.is_file())
+        self.assertEqual(shown, [target])
+        # Settings… from the menu works the same way.
+        with mock.patch.object(SettingsDialog, "exec", return_value=0) as settings_exec:
+            window.settings_action.trigger()
+        settings_exec.assert_called_once()
         window.deleteLater()
 
     def test_closing_the_app_closes_tracked_processes(self):

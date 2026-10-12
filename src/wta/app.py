@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QKeySequence
 from PySide6.QtWebEngineCore import QWebEngineProfile, qWebEngineChromiumVersion
 from PySide6.QtWidgets import (
     QApplication,
@@ -147,7 +147,8 @@ class MainWindow(QMainWindow):
         self.new_action.triggered.connect(self.new_session)
         self.open_action.triggered.connect(self.open_session)
         self.details_action.triggered.connect(self.edit_session)
-        self.export_action.triggered.connect(self.export_report)
+        # lambda: triggered(bool) would otherwise pass `checked` as the path.
+        self.export_action.triggered.connect(lambda: self.export_report())
         self.settings_action.triggered.connect(self.edit_settings)
         quit_action.triggered.connect(self.close)
 
@@ -178,6 +179,7 @@ class MainWindow(QMainWindow):
         """Export the open session's report in the default format (Settings) or the one chosen."""
         if self.current_session is None:
             return None
+        interactive = path is None  # from the menu: ask where to save, then show the result
         fmt = self.settings.export_format
         if path is not None and path.suffix.lstrip(".").lower() in app_settings.EXPORT_FORMATS:
             fmt = path.suffix.lstrip(".").lower()  # an explicit file name decides the format
@@ -201,7 +203,23 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Export report", f"Could not export the report:\n{exc}")
             return None
         self.statusBar().showMessage(f"Report exported to {written}", 10000)
+        if interactive:
+            self._show_exported(written)
         return written
+
+    def _show_exported(self, path: Path) -> None:
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle("Report exported")
+        box.setText(f"The report was saved to:\n{path}")
+        open_button = box.addButton("Open report", QMessageBox.ButtonRole.AcceptRole)
+        folder_button = box.addButton("Show in folder", QMessageBox.ButtonRole.ActionRole)
+        box.addButton(QMessageBox.StandardButton.Close)
+        box.exec()
+        if box.clickedButton() is open_button:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+        elif box.clickedButton() is folder_button:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent)))
 
     def _check_cdp(self) -> None:
         self._cdp_attempts += 1
