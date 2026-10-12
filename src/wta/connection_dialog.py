@@ -25,12 +25,14 @@ DEFAULT_PROMPT = (
 
 
 class ConnectionDialog(QDialog):
-    def __init__(self, port: int, mcp_config: Path, output_dir: Path, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, port: int, info: dict | None, mcp_config: Path, output_dir: Path, parent: QWidget | None = None
+    ) -> None:
+        """`info` is the cached /json/version answer (checked off the UI thread), or None."""
         super().__init__(parent)
         self.setWindowTitle("Claude connection")
         self.setMinimumWidth(720)
 
-        info = cdp.endpoint_info(port)
         status = (
             f"Reachable — {info.get('User-Agent', '')}"
             if info

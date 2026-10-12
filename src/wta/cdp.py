@@ -4,6 +4,10 @@ QtWebEngine reads QTWEBENGINE_REMOTE_DEBUGGING when it starts, so `enable()` mus
 before the QApplication is created. The port is bound to 127.0.0.1 only. If the port
 is taken, QtWebEngine just logs an error and runs without debugging, so callers check
 the endpoint with `endpoint_info()` after startup.
+
+The DevTools server lives inside this process and answers through the Qt main thread,
+so `endpoint_info()` for our own port must never be called on the Qt main thread: it
+would block until the timeout and always report "not reachable".
 """
 
 import json
