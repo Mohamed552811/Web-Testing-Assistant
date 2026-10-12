@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "web-testing-assistant"
+version = "0.1.0"
+description = "Desktop app where Claude Code runs web-app tests and the user reviews them"
+requires-python = ">=3.12"
+dependencies = [
+    "PySide6>=6.8",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
