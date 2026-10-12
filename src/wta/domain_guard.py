@@ -1,9 +1,10 @@
 """Blocks the embedded browser from leaving the allowed domains while Claude is running.
 
-This is enforced by the app, not just asked of Claude in the prompt. Only page and frame
-navigations are checked, so a page on an allowed domain can still load its scripts,
-fonts and images from elsewhere. Non-web schemes (file:, data:, javascript: …) are blocked
-for navigations too, so the browser cannot be used to read local files.
+This is enforced by the app, not just asked of Claude in the prompt. Only top-level page
+navigations are checked, so a page on an allowed domain can still load its scripts, fonts,
+images and embedded frames (captchas, payment fields, maps) from elsewhere; blocking those
+frames broke normal pages. Non-web schemes (file:, data:, javascript: …) are blocked for
+navigations too, so the browser cannot be used to read local files.
 """
 
 import ipaddress
@@ -11,10 +12,7 @@ import ipaddress
 from PySide6.QtCore import QUrl, Signal
 from PySide6.QtWebEngineCore import QWebEngineUrlRequestInfo, QWebEngineUrlRequestInterceptor
 
-_NAVIGATION_TYPES = (
-    QWebEngineUrlRequestInfo.ResourceType.ResourceTypeMainFrame,
-    QWebEngineUrlRequestInfo.ResourceType.ResourceTypeSubFrame,
-)
+_NAVIGATION_TYPES = (QWebEngineUrlRequestInfo.ResourceType.ResourceTypeMainFrame,)
 _ALWAYS_ALLOWED = ("about:blank",)
 
 

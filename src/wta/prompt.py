@@ -18,6 +18,19 @@ class RunContext:
     scenario_test_data: str
     confirm_risky_actions: bool = False
     site_notes: list[str] = field(default_factory=list)
+    smoke: "SmokeContext | None" = None
+
+
+@dataclass
+class SmokeContext:
+    """The page a smoke test checks, as the user described it."""
+
+    page_name: str
+    url: str
+    how_to_reach: str = ""
+    login_needed: bool = False
+    page_information: str = ""
+    expected_elements: str = ""
 
 
 def _site_notes_section(notes: list[str]) -> str:
@@ -49,6 +62,53 @@ Before a risky action ({RISKY_ACTIONS}), do NOT do it yet. Instead:
 2. End your turn immediately with one short sentence. You will be resumed with the user's decision."""
 
 
+def _task_section(ctx: RunContext) -> str:
+    if ctx.smoke is None:
+        return (
+            "## Scenario\n"
+            f"- Session: {ctx.session_name}\n"
+            f"- Name: {ctx.scenario_name}\n"
+            f"- Goal: {ctx.scenario_goal or '(not given)'}\n"
+            f"- Test data: {ctx.scenario_test_data or '(none)'}"
+        )
+    page = ctx.smoke
+    return (
+        "## Smoke test of one page\n"
+        f"- Session: {ctx.session_name}\n"
+        f"- Page: {page.page_name}\n"
+        f"- URL: {page.url}\n"
+        f"- How to reach it: {page.how_to_reach or 'open the URL directly'}\n"
+        f"- Login needed: {'yes, sign in with the test account first' if page.login_needed else 'no'}\n"
+        f"- About the page (from the user): {page.page_information or '(not given)'}\n"
+        f"- Elements the user expects: {page.expected_elements or '(not given; find the main ones yourself)'}"
+    )
+
+
+def _work_intro(ctx: RunContext) -> str:
+    if ctx.smoke is None:
+        return (
+            "- Break the scenario into small steps (one user action and its check per step) and carry them out in order.\n"
+            f"- After EVERY step, rewrite {RESULTS_FILE} in the current working directory with ALL steps so far and "
+            '"state": "running". The user watches this file live.'
+        )
+    return (
+        "- This is a smoke test: a quick, broad check that this one page works. Each check is one step.\n"
+        f"- FIRST, before checking anything, write the whole checklist to {RESULTS_FILE}: every check as a step with "
+        '"status": "not_run", "screen" = the page name, "element" = what is checked, "action" = how you check it '
+        'and "expected" = what should happen. Aim for 10 to 20 checks covering: the page loads (title, URL, no '
+        "error page), every expected element is present and labelled, the main controls work (forms accept input, "
+        "validation and error messages for wrong input, buttons respond), links and navigation on the allowed "
+        "domains, console errors, and anything the user's page information mentions.\n"
+        "- Keep it quick: check where links point from the snapshot (their URLs) and open at most two of them; "
+        "this test is about this one page, not the pages it links to.\n"
+        "- THEN run the checks in order. After EVERY check, rewrite the file with its result and "
+        '"state": "running". The user watches this file live.\n'
+        "- Smoke statuses: \"pass\" = Pass, \"fail\" = Bug (a product defect), \"blocked\" = Blocked (could not be "
+        "checked). Do not follow links to other domains to check them: mark such a check Blocked and say where it leads.\n"
+        "- If the page shows a cookie or consent banner, choose the option that declines non-essential cookies."
+    )
+
+
 def build_prompt(ctx: RunContext) -> str:
     domains = ", ".join(ctx.allowed_domains) or "(none)"
     account = (
@@ -73,20 +133,16 @@ def build_prompt(ctx: RunContext) -> str:
 ## Test account (test environment only)
 {account}
 
-## Scenario
-- Session: {ctx.session_name}
-- Name: {ctx.scenario_name}
-- Goal: {ctx.scenario_goal or "(not given)"}
-- Test data: {ctx.scenario_test_data or "(none)"}
+{_task_section(ctx)}
 
 {_site_notes_section(ctx.site_notes)}## How to work
-- Break the scenario into small steps (one user action and its check per step) and carry them out in order.
-- After EVERY step, rewrite {RESULTS_FILE} in the current working directory with ALL steps so far and "state": "running". The user watches this file live.
+{_work_intro(ctx)}
 - When finished (or when the scenario cannot continue), write {RESULTS_FILE} one last time with "state": "done" and a "summary".
 - Step status: "pass" (worked as expected), "fail" (a product bug), "blocked" (could not be checked: captcha, outside allowed domains, environment down, missing data), "not_run" (planned but not reached).
 - "reasoning": a short written explanation of what you saw and why you chose the status.
 - "page_url": the page URL after the step. "console_errors" / "failed_requests": fill them in when the tool output reports errors, or on fail and blocked steps (use the console and network tools then). Otherwise leave them empty.
 - Screenshots ONLY for "fail" and "blocked" steps: take one with the screenshot tool using filename "{SCREENSHOT_DIR}/step-<order>.png" and put that relative path in "screenshot". For other steps "screenshot" is null.
+- Screenshots are evidence for the user, not a way to look at the page: use snapshots to see the page, and never take any other screenshots.
 - Every "fail" step needs a "bug" object (fields follow Azure DevOps / TFS Bug work items; severity is one of "1 - Critical", "2 - High", "3 - Medium", "4 - Low"; priority is 1 to 4). Other steps have "bug": null.
 
 {RESULTS_FILE} format:
