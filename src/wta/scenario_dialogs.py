@@ -1,6 +1,7 @@
 """Dialogs for entering a scenario and a step."""
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -14,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from wta.db.models import StepStatus
-from wta.db.scenarios import ScenarioInput, StepInput
+from wta.db.scenarios import ScenarioInput, SmokePageInput, StepInput
 from wta.step_table import STATUS_LABELS
 
 
@@ -69,10 +70,68 @@ class ScenarioDialog(QDialog):
         return self._result
 
 
+class SmokePageDialog(QDialog):
+    """Describe one page for a smoke test. Claude writes the checklist from this."""
+
+    def __init__(self, parent: QWidget | None = None, data: SmokePageInput | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Edit smoke-test page" if data else "New smoke-test page")
+        self.setMinimumWidth(560)
+        self._result: SmokePageInput | None = None
+
+        self.page_name = QLineEdit(placeholderText="e.g. Login page")
+        self.url = QLineEdit(placeholderText="https://app.example.test/login")
+        self.how_to_reach = _text_box("e.g. Open the URL directly, or: Home > Settings > Billing", 55)
+        self.login_needed = QCheckBox("Sign in with the session's test account first")
+        self.page_information = _text_box("What the page is for and anything Claude should know", 90)
+        self.expected_elements = _text_box("Optional: fields, buttons, links or texts that must be there", 70)
+
+        form = QFormLayout()
+        form.addRow("Page name", self.page_name)
+        form.addRow("URL", self.url)
+        form.addRow("How to reach it", self.how_to_reach)
+        form.addRow("Login needed", self.login_needed)
+        form.addRow("Page information", self.page_information)
+        form.addRow("Expected elements", self.expected_elements)
+
+        layout = QVBoxLayout(self)
+        layout.addLayout(form)
+        layout.addWidget(_buttons(self))
+
+        if data:
+            self.page_name.setText(data.page_name)
+            self.url.setText(data.url)
+            self.how_to_reach.setPlainText(data.how_to_reach)
+            self.login_needed.setChecked(data.login_needed)
+            self.page_information.setPlainText(data.page_information)
+            self.expected_elements.setPlainText(data.expected_elements)
+
+    def accept(self) -> None:
+        data = SmokePageInput(
+            page_name=self.page_name.text(),
+            url=self.url.text(),
+            how_to_reach=self.how_to_reach.toPlainText(),
+            login_needed=self.login_needed.isChecked(),
+            page_information=self.page_information.toPlainText(),
+            expected_elements=self.expected_elements.toPlainText(),
+        )
+        try:
+            self._result = data.cleaned()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Check the page", str(exc))
+            return
+        super().accept()
+
+    def data(self) -> SmokePageInput | None:
+        return self._result
+
+
 class StepDialog(QDialog):
     """Claude's side of a step, entered by hand until the runner is built."""
 
-    def __init__(self, parent: QWidget | None = None, data: StepInput | None = None) -> None:
+    def __init__(
+        self, parent: QWidget | None = None, data: StepInput | None = None, labels: dict = STATUS_LABELS
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Edit step" if data else "New step")
         self.setMinimumWidth(560)
@@ -84,7 +143,7 @@ class StepDialog(QDialog):
         self.expected = _text_box(height=55)
         self.actual = _text_box(height=55)
         self.status = QComboBox()
-        for status, label in STATUS_LABELS.items():
+        for status, label in labels.items():
             self.status.addItem(label, status)
         self.reasoning = _text_box("Why this status was chosen", 80)
 

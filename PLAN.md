@@ -49,3 +49,10 @@ From Phase 7 (2026-10-12):
 - Proof run: with the note "after saving, reload and check the name persisted", run 2 added three steps (reload, sign in again, check). That surfaced a new finding: the change is not saved at all. Run 2 took 38 turns against 20 for run 1. Notes that add steps cost plan usage.
 - Claude noticed that navigating to the same `#hash` URL is not a reload and did a full reload instead.
 - The step table shows only each scenario's latest results; older runs stay readable from their own results.json in the Runs tab.
+
+From Phase 8 (2026-10-12):
+- Smoke batches are numbered separately from scenario batches: the slot uniqueness rule now includes `kind`. There was no real database yet, so no migration was needed.
+- The domain guard now checks top-level page navigations only. Checking frames too blocked a Google reCAPTCHA iframe on practicetestautomation.com's Contact page, and would break captchas, payment fields and maps.
+- Claude took extra "visual check" screenshots on passing checks until the prompt said screenshots are evidence only. After that the folder held only Bug/Blocked screenshots.
+- Smoke cost depends mostly on how many links Claude opens. First practice-page run: 52 turns, about 11% of the 5-hour window. After "check link targets from the snapshot, open at most two": 37 turns, about 3%.
+- practicetestautomation.com login page: 14 checks, all Pass. Valid published credentials deliberately not used to sign in (third-party site). The local Profile page smoke run produced 5 Bugs, each with a bug report and one screenshot.

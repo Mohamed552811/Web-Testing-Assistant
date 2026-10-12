@@ -1,4 +1,8 @@
-"""Scenario tab: batches of up to five scenarios, their steps, and step review."""
+"""Scenario tab and Smoke test tab: batches of up to five scenarios (or pages), their steps, and review.
+
+The smoke tab is the same widget with kind=smoke: pages instead of scenarios, checks instead of
+steps, and a failed check is called a Bug.
+"""
 
 from html import escape
 
@@ -25,9 +29,9 @@ from PySide6.QtWidgets import (
 
 from wta.db import Database
 from wta.db import scenarios as sc
-from wta.db.models import MAX_SCENARIOS_PER_BATCH, ReviewDecision, Scenario, Step, StepStatus
-from wta.scenario_dialogs import ScenarioDialog, StepDialog
-from wta.step_table import COLUMN_WIDTHS, STATUS_LABELS, StepTableModel
+from wta.db.models import MAX_SCENARIOS_PER_BATCH, ReviewDecision, Scenario, ScenarioKind, Step, StepStatus
+from wta.scenario_dialogs import ScenarioDialog, SmokePageDialog, StepDialog
+from wta.step_table import COLUMN_WIDTHS, SMOKE_LABELS, STATUS_LABELS, StepTableModel
 
 DECISION_LABELS = {
     ReviewDecision.APPROVED: "Approved",
@@ -40,9 +44,13 @@ class ScenarioTab(QWidget):
     status_message = Signal(str)
     run_requested = Signal(int)  # batch number
 
-    def __init__(self, db: Database, parent: QWidget | None = None) -> None:
+    def __init__(self, db: Database, parent: QWidget | None = None, kind: ScenarioKind = ScenarioKind.SCENARIO) -> None:
         super().__init__(parent)
         self.db = db
+        self.kind = kind
+        self.smoke = kind == ScenarioKind.SMOKE
+        self.labels = SMOKE_LABELS if self.smoke else STATUS_LABELS
+        self.item_name = "page" if self.smoke else "scenario"
         self.session_id: int | None = None
         self.batch: int = 1
 
@@ -61,7 +69,7 @@ class ScenarioTab(QWidget):
 
         # Scenarios
         self.scenario_list = QListWidget()
-        self.add_scenario_button = QPushButton("Add scenario…")
+        self.add_scenario_button = QPushButton(f"Add {self.item_name}…")
         self.edit_scenario_button = QPushButton("Edit…")
         self.remove_scenario_button = QPushButton("Remove")
         self.scenario_count = QLabel()
@@ -70,13 +78,13 @@ class ScenarioTab(QWidget):
             scenario_buttons.addWidget(w)
         scenario_buttons.addStretch(1)
         scenario_buttons.addWidget(self.scenario_count)
-        scenario_box = QGroupBox("Scenarios")
+        scenario_box = QGroupBox("Pages to smoke-test" if self.smoke else "Scenarios")
         scenario_layout = QVBoxLayout(scenario_box)
         scenario_layout.addWidget(self.scenario_list)
         scenario_layout.addLayout(scenario_buttons)
 
         # Steps
-        self.step_model = StepTableModel(self)
+        self.step_model = StepTableModel(self, self.labels)
         self.step_table = QTableView()
         self.step_table.setModel(self.step_model)
         self.step_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -108,7 +116,7 @@ class ScenarioTab(QWidget):
         self.approve_button = QPushButton("Approve")
         self.approve_button.setToolTip("Accept Claude's status as final")
         self.override_combo = QComboBox()
-        for status, label in STATUS_LABELS.items():
+        for status, label in self.labels.items():
             self.override_combo.addItem(label, status)
         self.override_button = QPushButton("Override")
         self.override_button.setToolTip("Set a different final status; Claude's status is kept")
@@ -164,7 +172,9 @@ class ScenarioTab(QWidget):
         """Enable "Run batch" only when runs are allowed and none is in progress."""
         self.run_button.setEnabled(allowed and not running)
         self.run_button.setText("Running…" if running else "Run batch")
-        self.run_button.setToolTip(reason or "Run Claude Code on scenarios in this batch that have no results or need a re-run")
+        self.run_button.setToolTip(
+            reason or f"Run Claude Code on {self.item_name}s in this batch that have no results or need a re-run"
+        )
         # Editing the batch while Claude writes results into it would be confusing.
         self.new_batch_button.setEnabled(not running)
         self.batch_combo.setEnabled(not running)
@@ -185,7 +195,7 @@ class ScenarioTab(QWidget):
     def set_session(self, session_id: int | None) -> None:
         self.session_id = session_id
         self.setEnabled(session_id is not None)
-        batches = sc.batch_numbers(self.db, session_id) if session_id is not None else []
+        batches = sc.batch_numbers(self.db, session_id, self.kind) if session_id is not None else []
         self._fill_batches(batches, batches[-1] if batches else 1)
 
     def _fill_batches(self, batches: list[int], current: int) -> None:
@@ -208,11 +218,11 @@ class ScenarioTab(QWidget):
         if self.session_id is None:
             return
         try:
-            number = sc.next_batch_number(self.db, self.session_id)
+            number = sc.next_batch_number(self.db, self.session_id, self.kind)
         except sc.BatchNotReviewedError as exc:
             QMessageBox.information(self, "New batch", str(exc))
             return
-        batches = sc.batch_numbers(self.db, self.session_id)
+        batches = sc.batch_numbers(self.db, self.session_id, self.kind)
         already_shown = self.batch_combo.findData(number) >= 0
         if number == 1 or already_shown:
             # Nothing new to confirm: the first batch, or an empty batch the user already started.
@@ -225,7 +235,7 @@ class ScenarioTab(QWidget):
         )
         if answer == QMessageBox.StandardButton.Yes:
             self._fill_batches(batches, number)
-            self.status_message.emit(f"Batch {number} started. Add up to {MAX_SCENARIOS_PER_BATCH} scenarios.")
+            self.status_message.emit(f"Batch {number} started. Add up to {MAX_SCENARIOS_PER_BATCH} {self.item_name}s.")
 
     # --- scenarios -----------------------------------------------------------
 
@@ -235,13 +245,22 @@ class ScenarioTab(QWidget):
 
     def _load_scenarios(self, select_id: int | None = None) -> None:
         keep = select_id if select_id is not None else getattr(self._current_scenario(), "id", None)
-        scenarios = sc.batch_scenarios(self.db, self.session_id, self.batch) if self.session_id is not None else []
+        scenarios = (
+            sc.batch_scenarios(self.db, self.session_id, self.batch, self.kind) if self.session_id is not None else []
+        )
         self.scenario_list.blockSignals(True)
         self.scenario_list.clear()
         for scenario in scenarios:
-            item = QListWidgetItem(f"{scenario.position}. {scenario.name}")
+            page = scenario.smoke_page
+            if page is not None:
+                item = QListWidgetItem(f"{scenario.position}. {page.page_name} — {page.url}")
+                item.setToolTip(
+                    f"How to reach it: {page.how_to_reach or '—'}\nLogin needed: {'yes' if page.login_needed else 'no'}"
+                )
+            else:
+                item = QListWidgetItem(f"{scenario.position}. {scenario.name}")
+                item.setToolTip(f"Goal: {scenario.goal or '—'}\nTest data: {scenario.test_data or '—'}")
             item.setData(Qt.ItemDataRole.UserRole, scenario)
-            item.setToolTip(f"Goal: {scenario.goal or '—'}\nTest data: {scenario.test_data or '—'}")
             self.scenario_list.addItem(item)
         row = next((i for i, s in enumerate(scenarios) if s.id == keep), 0 if scenarios else -1)
         self.scenario_list.setCurrentRow(row)
@@ -254,19 +273,28 @@ class ScenarioTab(QWidget):
         self._load_steps()
 
     def add_scenario(self) -> None:
-        dialog = ScenarioDialog(self)
+        dialog = SmokePageDialog(self) if self.smoke else ScenarioDialog(self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         try:
-            scenario = sc.add_scenario(self.db, self.session_id, self.batch, dialog.data())
+            if self.smoke:
+                scenario = sc.add_smoke_page(self.db, self.session_id, self.batch, dialog.data())
+            else:
+                scenario = sc.add_scenario(self.db, self.session_id, self.batch, dialog.data())
         except sc.BatchFullError as exc:
-            QMessageBox.warning(self, "Add scenario", str(exc))
+            QMessageBox.warning(self, f"Add {self.item_name}", str(exc))
             return
         self._load_scenarios(select_id=scenario.id)
 
     def edit_scenario(self) -> None:
         scenario = self._current_scenario()
         if scenario is None:
+            return
+        if scenario.smoke_page is not None:
+            dialog = SmokePageDialog(self, sc.SmokePageInput.of(scenario.smoke_page))
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                sc.update_smoke_page(self.db, scenario.id, dialog.data())
+                self._load_scenarios(select_id=scenario.id)
             return
         dialog = ScenarioDialog(self, sc.ScenarioInput(scenario.name, scenario.goal, scenario.test_data))
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -278,7 +306,7 @@ class ScenarioTab(QWidget):
         if scenario is None:
             return
         answer = QMessageBox.question(
-            self, "Remove scenario", f"Remove “{scenario.name}” and all its steps and reviews?"
+            self, f"Remove {self.item_name}", f"Remove “{scenario.name}” and all its steps and reviews?"
         )
         if answer == QMessageBox.StandardButton.Yes:
             sc.delete_scenario(self.db, scenario.id)
@@ -294,7 +322,8 @@ class ScenarioTab(QWidget):
         scenario = self._current_scenario()
         steps = sc.scenario_steps(self.db, scenario.id) if scenario else []
         self.step_model.set_steps(steps)
-        self.steps_box.setTitle(f"Steps — {scenario.name}" if scenario else "Steps")
+        title = "Checks" if self.smoke else "Steps"
+        self.steps_box.setTitle(f"{title} — {scenario.name}" if scenario else title)
         self.steps_box.setEnabled(scenario is not None)
         row = self.step_model.row_of(keep) if keep is not None else -1
         if row < 0 and steps:
@@ -311,7 +340,7 @@ class ScenarioTab(QWidget):
         scenario = self._current_scenario()
         if scenario is None:
             return
-        dialog = StepDialog(self)
+        dialog = StepDialog(self, labels=self.labels)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             step = sc.add_step(self.db, scenario.id, dialog.data())
             self._load_steps(select_id=step.id)
@@ -325,7 +354,7 @@ class ScenarioTab(QWidget):
             expected_result=step.expected_result, actual_result=step.actual_result,
             status=step.status, reasoning=step.reasoning,
         )
-        dialog = StepDialog(self, current)
+        dialog = StepDialog(self, current, labels=self.labels)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             sc.update_step(self.db, step.id, dialog.data())
             self._load_steps(select_id=step.id)
@@ -352,7 +381,7 @@ class ScenarioTab(QWidget):
             self.step_details.clear()
             return
         self.override_combo.setCurrentIndex(self.override_combo.findData(step.final_status or step.status))
-        self.step_details.setHtml(_step_html(step))
+        self.step_details.setHtml(_step_html(step, self.labels))
 
     def _review(self, action) -> None:
         step = self._current_step()
@@ -377,7 +406,7 @@ class ScenarioTab(QWidget):
         self._review(lambda step: sc.request_rerun(self.db, step.id, self.comment.toPlainText()))
 
 
-def _step_html(step: Step) -> str:
+def _step_html(step: Step, labels: dict = STATUS_LABELS) -> str:
     def row(label: str, value: str) -> str:
         return f"<tr><td style='color:gray;padding-right:8px'>{label}</td><td>{escape(value or '—')}</td></tr>"
 
@@ -386,14 +415,14 @@ def _step_html(step: Step) -> str:
         row("Action / input", step.action),
         row("Expected", step.expected_result),
         row("Actual", step.actual_result),
-        row("Claude status", STATUS_LABELS[step.status]),
+        row("Claude status", labels[step.status]),
         row("Claude reasoning", step.reasoning),
         "</table>",
     ]
     if step.reviews:
         parts.append("<p><b>Review history</b></p><ul>")
         for review in reversed(step.reviews):
-            final = f" → {STATUS_LABELS[review.final_status]}" if review.final_status else ""
+            final = f" → {labels[review.final_status]}" if review.final_status else ""
             comment = f": {escape(review.comment)}" if review.comment else ""
             when = review.reviewed_at.strftime("%Y-%m-%d %H:%M UTC")
             parts.append(f"<li>{when} — {DECISION_LABELS[review.decision]}{final}{comment}</li>")

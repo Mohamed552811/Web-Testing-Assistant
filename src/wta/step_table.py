@@ -12,6 +12,9 @@ STATUS_LABELS = {
     StepStatus.NOT_RUN: "Not run",
 }
 
+# The smoke-test tab calls a failed check a Bug.
+SMOKE_LABELS = {status: status.smoke_label for status in StepStatus}
+
 STATUS_COLORS = {
     StepStatus.PASS: QColor(46, 160, 67, 70),
     StepStatus.FAIL: QColor(218, 54, 51, 80),
@@ -39,19 +42,20 @@ COL_CLAUDE_STATUS = COLUMNS.index("Claude status")
 COL_FINAL_STATUS = COLUMNS.index("Final status")
 
 
-def final_status_text(step: Step) -> str:
+def final_status_text(step: Step, labels: dict = STATUS_LABELS) -> str:
     review = step.latest_review
     if review is None:
         return PENDING
     if review.decision == ReviewDecision.RERUN_REQUESTED:
         return RERUN
-    label = STATUS_LABELS[review.final_status]
+    label = labels[review.final_status]
     return f"{label} (override)" if review.decision == ReviewDecision.OVERRIDDEN else label
 
 
 class StepTableModel(QAbstractTableModel):
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, labels: dict = STATUS_LABELS) -> None:
         super().__init__(parent)
+        self.labels = labels
         self._steps: list[Step] = []
 
     def set_steps(self, steps: list[Step]) -> None:
@@ -80,8 +84,8 @@ class StepTableModel(QAbstractTableModel):
         review = step.latest_review
         return (
             str(step.order),
-            STATUS_LABELS[step.status],
-            final_status_text(step),
+            self.labels[step.status],
+            final_status_text(step, self.labels),
             step.screen_name,
             step.element,
             step.action,

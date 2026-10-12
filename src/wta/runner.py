@@ -68,9 +68,12 @@ def make_redactor(*secrets: str):
     return redact
 
 
-def run_folder(base: Path, session_id: int, batch: int, position: int, now: datetime | None = None) -> Path:
+def run_folder(
+    base: Path, session_id: int, batch: int, position: int, now: datetime | None = None, smoke: bool = False
+) -> Path:
     stamp = (now or datetime.now()).strftime("%Y%m%d-%H%M%S")
-    return base / f"session-{session_id}" / f"batch-{batch}" / f"scenario-{position}-{stamp}"
+    batch_dir, item = (f"smoke-batch-{batch}", "page") if smoke else (f"batch-{batch}", "scenario")
+    return base / f"session-{session_id}" / batch_dir / f"{item}-{position}-{stamp}"
 
 
 class ScenarioRun(QObject):

@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 from wta.db import Database
 from wta.db import runs as run_store
 from wta.db import site_notes
-from wta.db.models import Run, RunOutcomeKind, TraceKind
+from wta.db.models import Run, RunOutcomeKind, ScenarioKind, TraceKind
 from wta.run_panel import KIND_STYLE
 
 OUTCOME_LABELS = {
@@ -217,7 +217,8 @@ class RunsTab(QWidget):
         for row, run in enumerate(self._runs):
             values = (
                 local_time(run.started_at),
-                str(run.scenario.batch_number),
+                (f"Smoke {run.scenario.batch_number}" if run.scenario.kind == ScenarioKind.SMOKE
+                 else str(run.scenario.batch_number)),
                 run.scenario.name,
                 OUTCOME_LABELS[run.outcome],
                 "" if run.num_turns is None else str(run.num_turns),

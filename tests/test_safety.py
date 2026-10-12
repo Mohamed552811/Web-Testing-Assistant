@@ -2,7 +2,9 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -71,6 +73,36 @@ class DomainGuardTests(unittest.TestCase):
         wait_for(page.loadFinished, 15000)
         self.assertEqual(len(blocked), 1)
         del page
+
+    def test_guard_lets_allowed_pages_embed_other_frames(self):
+        class FramePage(BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = b'<html><body><iframe src="http://localhost:1/embedded"></iframe></body></html>'
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), FramePage)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            profile = QWebEngineProfile()
+            guard = NavigationGuard()
+            profile.setUrlRequestInterceptor(guard)
+            page = QWebEnginePage(profile)
+            blocked = []
+            guard.blocked.connect(blocked.append)
+            guard.activate(["127.0.0.1"])
+            page.load(QUrl(f"http://127.0.0.1:{server.server_address[1]}/"))
+            wait_for(page.loadFinished, 15000)
+            self.assertEqual(blocked, [])  # the localhost iframe is a frame, not a page navigation
+            del page
+        finally:
+            server.shutdown()
+            server.server_close()
 
 
 class SettingsAndPromptTests(unittest.TestCase):

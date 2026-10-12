@@ -32,7 +32,8 @@ from wta.db import scenarios as sc
 from wta.db import site_notes
 from wta.db.models import TestSession
 from wta.paths import data_dir, database_path
-from wta.prompt import RunContext
+from wta.db.models import ScenarioKind
+from wta.prompt import RunContext, SmokeContext
 from wta.run_panel import RunPanel
 from wta.runs_tab import RunsTab
 from wta.runner import BatchRun, RunOutcome, ScenarioJob, ScenarioRun, default_runs_dir, run_folder
@@ -94,11 +95,16 @@ class MainWindow(QMainWindow):
 
         self.scenario_tab = ScenarioTab(db, self)
         self.scenario_tab.status_message.connect(self.statusBar().showMessage)
-        self.scenario_tab.run_requested.connect(self.run_batch)
+        self.scenario_tab.run_requested.connect(lambda batch: self.run_batch(batch, ScenarioKind.SCENARIO))
+        self.smoke_tab = ScenarioTab(db, self, kind=ScenarioKind.SMOKE)
+        self.smoke_tab.status_message.connect(self.statusBar().showMessage)
+        self.smoke_tab.run_requested.connect(lambda batch: self.run_batch(batch, ScenarioKind.SMOKE))
+        self.review_tabs = (self.scenario_tab, self.smoke_tab)
         self.run_panel = RunPanel(self)
         self.run_panel.stop_requested.connect(self.stop_run)
         self.tabs = QTabWidget()
         self.tabs.addTab(self.scenario_tab, "Scenarios")
+        self.tabs.addTab(self.smoke_tab, "Smoke test")
         self.tabs.addTab(self.run_panel, "Live run")
         self.runs_tab = RunsTab(db, self)
         self.tabs.addTab(self.runs_tab, "Runs")
@@ -226,7 +232,8 @@ class MainWindow(QMainWindow):
     def show_session(self, session: TestSession) -> None:
         self.current_session = session
         self._update_title()
-        self.scenario_tab.set_session(session.id)
+        for tab in self.review_tabs:
+            tab.set_session(session.id)
         self.runs_tab.set_session(session.id, site_notes.site_for_url(session.target_url))
         self.browser.set_viewport(session.viewport_width, session.viewport_height)
         self.browser.view.load(QUrl(session.target_url))
@@ -252,18 +259,22 @@ class MainWindow(QMainWindow):
     def _update_run_state(self) -> None:
         running = self.batch_run is not None
         blocker = "" if running else self._run_blocker()
-        self.scenario_tab.set_run_state(allowed=not blocker, running=running, reason=blocker)
+        for tab in self.review_tabs:
+            tab.set_run_state(allowed=not blocker, running=running, reason=blocker)
         self.new_action.setEnabled(not running)
         self.open_action.setEnabled(not running)
         self.details_action.setEnabled(not running and self.current_session is not None)
 
-    def run_batch(self, batch: int) -> None:
+    def _site_notes_for(self, url: str) -> list[str]:
+        return [n.note for n in site_notes.list_notes(self.db, site_notes.site_for_url(url))]
+
+    def run_batch(self, batch: int, kind: ScenarioKind = ScenarioKind.SCENARIO) -> None:
         blocker = self._run_blocker()
         if blocker:
             QMessageBox.information(self, "Run batch", blocker)
             return
         session = store.load_session(self.db, self.current_session.id)
-        selected = sc.scenarios_to_run(self.db, session.id, batch)
+        selected = sc.scenarios_to_run(self.db, session.id, batch, kind)
         if not selected:
             QMessageBox.information(
                 self,
@@ -284,12 +295,11 @@ class MainWindow(QMainWindow):
                 return
 
         runs_dir = default_runs_dir(self.app_dir)
-        notes = [n.note for n in site_notes.list_notes(self.db, site_notes.site_for_url(session.target_url))]
         jobs = [
             ScenarioJob(
                 scenario_id=scenario.id,
-                title=scenario.name,
-                run_dir=run_folder(runs_dir, session.id, batch, scenario.position),
+                title=(f"Smoke: {scenario.name}" if scenario.smoke_page else scenario.name),
+                run_dir=run_folder(runs_dir, session.id, batch, scenario.position, smoke=scenario.smoke_page is not None),
                 context=RunContext(
                     session_name=session.name,
                     target_url=session.target_url,
@@ -299,8 +309,9 @@ class MainWindow(QMainWindow):
                     scenario_name=scenario.name,
                     scenario_goal=scenario.goal,
                     scenario_test_data=scenario.test_data,
-                    site_notes=notes,
+                    site_notes=self._site_notes_for(scenario.smoke_page.url if scenario.smoke_page else session.target_url),
                     confirm_risky_actions=self.settings.confirm_risky_actions,
+                    smoke=SmokeContext(**vars(sc.SmokePageInput.of(scenario.smoke_page))) if scenario.smoke_page else None,
                 ),
             )
             for scenario, _rerun in selected
@@ -311,7 +322,8 @@ class MainWindow(QMainWindow):
         self.batch_run.confirmation_needed.connect(self._ask_confirmation)
         self.batch_run.scenario_started.connect(self.run_panel.scenario_started)
         self.batch_run.event.connect(self.run_panel.add_event)
-        self.batch_run.results_changed.connect(self.scenario_tab.refresh)
+        for tab in self.review_tabs:
+            self.batch_run.results_changed.connect(tab.refresh)
         self.batch_run.usage_changed.connect(lambda _state: self.top_bar.refresh_usage())
         self.batch_run.scenario_finished.connect(self._scenario_finished)
         self.batch_run.all_finished.connect(self._batch_finished)
@@ -366,7 +378,8 @@ class MainWindow(QMainWindow):
     def _scenario_finished(self, outcome: RunOutcome) -> None:
         title = next((j.title for j in self.batch_run.jobs if j.scenario_id == outcome.scenario_id), "Scenario")
         self.run_panel.scenario_finished(outcome, title)
-        self.scenario_tab.refresh(outcome.scenario_id)
+        for tab in self.review_tabs:
+            tab.refresh(outcome.scenario_id)
         self.runs_tab.refresh()
 
     def _batch_finished(self) -> None:
@@ -377,7 +390,7 @@ class MainWindow(QMainWindow):
         self.batch_run = None
         self._update_run_state()
         self.statusBar().showMessage(
-            "Run finished. Review each step on the Scenarios tab; add site notes on the Runs tab."
+            "Run finished. Review each step on the Scenarios or Smoke test tab; add site notes on the Runs tab."
         )
 
     def closeEvent(self, event: QCloseEvent) -> None:
