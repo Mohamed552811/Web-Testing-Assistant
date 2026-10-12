@@ -33,3 +33,12 @@ From Phase 5 (2026-10-12):
 - First real run (one scenario, 8 steps, login included): 66 s, 20 turns, 5-hour usage 40% → 43%, weekly 5% → 6% (Pro plan).
 - Claude did not always rewrite results.json after every step: it wrote steps 5 to 8 in one update to save turns. The live step table then jumps ahead in one go. The live action panel is unaffected.
 - Playwright tool results ("Saw") include the Playwright code that ran. Useful but wordy in the live panel.
+
+From Phase 6 (2026-10-12):
+- `--disallowedTools` removes the denied Playwright tools from Claude's tool list entirely; Claude reported "no JavaScript evaluation tool is available".
+- `--restricted` refuses writes outside the working directory even when explicitly asked ("--restricted confines the file tools to the working directory").
+- The domain guard (a QWebEngineUrlRequestInterceptor on the profile, active only during runs) blocked a JavaScript redirect to another host. Playwright saw `net::ERR_ACCESS_DENIED`, and the app logged the block in the trace.
+- Prompt injection on a page (visible and hidden) was ignored and reported as notices in all runs.
+- A run's process tree on Windows is claude.exe → cmd/conhost → node (npx) → cmd/conhost → node (Playwright MCP): 7 processes, all tracked and killed by Stop or Close all browsers in about 0.3 s. Other browser-like processes were untouched (36 before, 36 after).
+- After a `--resume`, Claude's earlier snapshot element refs are stale; it re-snapshots and retries by itself.
+- Plan usage over Phase 6's six real runs: 5-hour went from 52% to 55%, weekly from 7% to 8%.

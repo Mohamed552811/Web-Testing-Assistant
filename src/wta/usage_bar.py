@@ -74,6 +74,7 @@ class TopBar(QWidget):
     """Shows whether runs are allowed (Claude Code signed in) and the plan usage."""
 
     sign_in_changed = Signal(bool)
+    close_all_requested = Signal()
 
     def __init__(self, usage_path: Path, parent=None) -> None:
         super().__init__(parent)
@@ -87,11 +88,19 @@ class TopBar(QWidget):
         self.seven_day = _WindowBar("Weekly")
         self.updated = QLabel()
         self.updated.setStyleSheet(f"color: {GREY};")
+        self.close_all_button = QPushButton("Close all browsers")
+        self.close_all_button.setToolTip(
+            "Stop any running test and close every process the app or Playwright started. "
+            "Your own browsers are never touched."
+        )
+        self.close_all_button.clicked.connect(self.close_all_requested)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 4, 8, 4)
         layout.addWidget(self.claude_label)
         layout.addWidget(self.check_button)
+        layout.addSpacing(12)
+        layout.addWidget(self.close_all_button)
         layout.addStretch(1)
         layout.addWidget(self.five_hour)
         layout.addSpacing(16)

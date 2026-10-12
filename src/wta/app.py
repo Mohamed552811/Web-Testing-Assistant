@@ -20,15 +20,19 @@ from PySide6.QtWidgets import (
 
 from wta import __version__
 from wta import cdp
+from wta import settings as app_settings
 from wta.browser import BrowserPane, make_profile
 from wta.connection_dialog import ConnectionDialog
+from wta.domain_guard import NavigationGuard
+from wta.processes import ProcessRegistry
+from wta.results import ConfirmationRequest
 from wta.db import Database, store
 from wta.db import scenarios as sc
 from wta.db.models import TestSession
 from wta.paths import data_dir, database_path
 from wta.prompt import RunContext
 from wta.run_panel import RunPanel
-from wta.runner import BatchRun, RunOutcome, ScenarioJob, default_runs_dir, run_folder
+from wta.runner import BatchRun, RunOutcome, ScenarioJob, ScenarioRun, default_runs_dir, run_folder
 from wta.scenario_tab import ScenarioTab
 from wta.session_dialogs import OpenSessionDialog, SessionDialog
 from wta.usage_bar import TopBar
@@ -36,6 +40,8 @@ from wta.usage_bar import TopBar
 APP_TITLE = "Web Testing Assistant"
 START_PAGE = "about:blank"
 USAGE_FILE = "usage.json"
+PROCESSES_FILE = "processes.json"
+SETTINGS_FILE = "settings.json"
 CDP_CHECK_ATTEMPTS = 4
 
 
@@ -56,11 +62,17 @@ class MainWindow(QMainWindow):
         cdp_port: int | None = None,
         app_dir: Path | None = None,
         check_sign_in: bool = True,
+        guard: NavigationGuard | None = None,
     ) -> None:
         super().__init__()
         self.db = db
         self.cdp_port = cdp_port
         self.app_dir = app_dir or data_dir()
+        self.guard = guard
+        self.registry = ProcessRegistry(self.app_dir / PROCESSES_FILE)
+        self.settings = app_settings.load(self.app_dir / SETTINGS_FILE)
+        if guard is not None:
+            guard.blocked.connect(self._on_navigation_blocked)
         self.current_session: TestSession | None = None
         self.batch_run: BatchRun | None = None
         self.cdp_info: dict | None = None
@@ -71,6 +83,7 @@ class MainWindow(QMainWindow):
 
         self.top_bar = TopBar(self.app_dir / USAGE_FILE, self)
         self.top_bar.sign_in_changed.connect(lambda _ok: self._update_run_state())
+        self.top_bar.close_all_requested.connect(self.close_all_browsers)
 
         self.browser = BrowserPane(self, profile)
         self.browser.view.load(QUrl(START_PAGE))
@@ -80,6 +93,7 @@ class MainWindow(QMainWindow):
         self.scenario_tab.status_message.connect(self.statusBar().showMessage)
         self.scenario_tab.run_requested.connect(self.run_batch)
         self.run_panel = RunPanel(self)
+        self.run_panel.stop_requested.connect(self.stop_run)
         self.tabs = QTabWidget()
         self.tabs.addTab(self.scenario_tab, "Scenarios")
         self.tabs.addTab(self.run_panel, "Live run")
@@ -126,6 +140,26 @@ class MainWindow(QMainWindow):
         self.connection_action = QAction("&Claude connection…", self, enabled=self.cdp_port is not None)
         self.connection_action.triggered.connect(self.show_connection)
         browser_menu.addAction(self.connection_action)
+        close_all = QAction("Close &all browsers", self)
+        close_all.triggered.connect(self.close_all_browsers)
+        browser_menu.addAction(close_all)
+
+        run_menu = self.menuBar().addMenu("&Run")
+        self.confirm_action = QAction("Confirm risky actions before Claude does them", self, checkable=True)
+        self.confirm_action.setChecked(self.settings.confirm_risky_actions)
+        self.confirm_action.setToolTip(
+            "Claude pauses before deleting, sending, paying or other irreversible actions and asks you first."
+        )
+        self.confirm_action.toggled.connect(self._set_confirm_risky)
+        run_menu.addAction(self.confirm_action)
+
+    def _set_confirm_risky(self, enabled: bool) -> None:
+        self.settings.confirm_risky_actions = enabled
+        app_settings.save(self.app_dir / SETTINGS_FILE, self.settings)
+        self.statusBar().showMessage(
+            "Claude will ask before risky actions (from the next run)." if enabled
+            else "Claude will not pause before risky actions.", 5000
+        )
 
     def _check_cdp(self) -> None:
         self._cdp_attempts += 1
@@ -258,11 +292,15 @@ class MainWindow(QMainWindow):
                     scenario_name=scenario.name,
                     scenario_goal=scenario.goal,
                     scenario_test_data=scenario.test_data,
+                    confirm_risky_actions=self.settings.confirm_risky_actions,
                 ),
             )
             for scenario, _rerun in selected
         ]
-        self.batch_run = BatchRun(self.db, jobs, self.cdp_port, self.app_dir / USAGE_FILE, self)
+        if self.guard is not None:
+            self.guard.activate(list(session.allowed_domains))
+        self.batch_run = BatchRun(self.db, jobs, self.cdp_port, self.app_dir / USAGE_FILE, self.registry, self)
+        self.batch_run.confirmation_needed.connect(self._ask_confirmation)
         self.batch_run.scenario_started.connect(self.run_panel.scenario_started)
         self.batch_run.event.connect(self.run_panel.add_event)
         self.batch_run.results_changed.connect(self.scenario_tab.refresh)
@@ -270,9 +308,52 @@ class MainWindow(QMainWindow):
         self.batch_run.scenario_finished.connect(self._scenario_finished)
         self.batch_run.all_finished.connect(self._batch_finished)
         self.run_panel.clear()
+        self.run_panel.set_running(True)
         self.tabs.setCurrentWidget(self.run_panel)
         self._update_run_state()
         self.batch_run.start()
+
+    def stop_run(self) -> None:
+        if self.batch_run is not None:
+            self.batch_run.stop()
+            self.statusBar().showMessage("Run stopped.")
+
+    def close_all_browsers(self) -> None:
+        """Stop any run and close every process the app or Playwright started (tracked by PID).
+        The embedded browser is part of the app, so its page is unloaded instead."""
+        stopped = self.batch_run is not None
+        self.registry.refresh()
+        tracked = {pid for pid, entry in self.registry.entries.items() if self.registry.is_same_process(entry)}
+        self.stop_run()  # kills the run's process tree
+        tracked |= {entry.pid for entry in self.registry.kill_all()}  # anything else still tracked
+        self.browser.view.stop()
+        self.browser.view.load(QUrl(START_PAGE))
+        parts = (["stopped the run"] if stopped else []) + [
+            f"closed {len(tracked)} process(es) the app started",
+            "cleared the embedded browser",
+        ]
+        self.statusBar().showMessage("Close all browsers: " + ", ".join(parts) + ".")
+
+    def _on_navigation_blocked(self, url: str) -> None:
+        message = f"Blocked navigation to {url}: outside the allowed domains."
+        self.statusBar().showMessage(message, 8000)
+        if self.batch_run is not None and self.batch_run.current is not None:
+            self.batch_run.current.add_note(f"App: {message}")
+
+    def _ask_confirmation(self, run: ScenarioRun, request: ConfirmationRequest) -> None:
+        self.tabs.setCurrentWidget(self.run_panel)
+        step = f" (step {request.step})" if request.step else ""
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle("Claude asks for confirmation")
+        box.setText(f"Claude wants to do a risky action{step}:\n\n{request.action}")
+        box.setInformativeText(f"Why: {request.reason or '(no reason given)'}\n\nAllow it?")
+        allow = box.addButton("Allow", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Decline", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if self.batch_run is None or run.stopped:
+            return  # stopped while the question was open
+        run.answer_confirmation(box.clickedButton() is allow)
 
     def _scenario_finished(self, outcome: RunOutcome) -> None:
         title = next((j.title for j in self.batch_run.jobs if j.scenario_id == outcome.scenario_id), "Scenario")
@@ -280,7 +361,9 @@ class MainWindow(QMainWindow):
         self.scenario_tab.refresh(outcome.scenario_id)
 
     def _batch_finished(self) -> None:
-        self.run_panel.all_finished()
+        if self.guard is not None:
+            self.guard.deactivate()
+        self.run_panel.all_finished(stopped=self.batch_run.stopped)
         self.batch_run.deleteLater()
         self.batch_run = None
         self._update_run_state()
@@ -292,7 +375,8 @@ class MainWindow(QMainWindow):
             if answer != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
-            self.batch_run.kill()
+            self.batch_run.stop()
+        self.registry.kill_all()  # on exit, close everything the app started
         super().closeEvent(event)
 
 
@@ -303,7 +387,9 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationName(APP_TITLE)
     db = Database(database_path())
     profile = make_profile(data_dir() / "browser-profile", app)
-    window = MainWindow(db, profile, cdp_port)
+    guard = NavigationGuard(app)
+    profile.setUrlRequestInterceptor(guard)
+    window = MainWindow(db, profile, cdp_port, guard=guard)
     window.show()
     try:
         return app.exec()

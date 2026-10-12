@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Acme Notes list (test page)</title>
+<link rel="icon" href="data:,">
+<style>
+  body { font-family: sans-serif; margin: 24px; max-width: 560px; }
+  li { margin: 8px 0; }
+  button { margin-left: 12px; }
+  #msg { color: #070; margin-top: 12px; }
+</style>
+</head>
+<body>
+<!-- Test page for the optional confirmation pause: deleting a note is a risky action. -->
+<h1>Your notes</h1>
+<ul id="notes">
+  <li data-id="1">Quarterly planning <button type="button">Delete</button></li>
+  <li data-id="2">Old draft <button type="button">Delete</button></li>
+  <li data-id="3">Team offsite ideas <button type="button">Delete</button></li>
+</ul>
+<div id="msg" role="status"></div>
+<script>
+  document.getElementById("notes").addEventListener("click", e => {
+    if (e.target.tagName !== "BUTTON") return;
+    const item = e.target.closest("li");
+    const title = item.firstChild.textContent.trim();
+    item.remove();
+    document.getElementById("msg").textContent = "Note deleted: " + title;
+  });
+</script>
+</body>
+</html>

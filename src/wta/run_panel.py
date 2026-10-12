@@ -2,9 +2,18 @@
 
 from datetime import datetime
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QBrush, QColor
-from PySide6.QtWidgets import QLabel, QListWidget, QListWidgetItem, QPlainTextEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QPlainTextEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from wta.db.models import TraceKind
 from wta.runner import RunOutcome, ScenarioJob
@@ -18,6 +27,8 @@ KIND_STYLE = {
 
 
 class RunPanel(QWidget):
+    stop_requested = Signal()
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.header = QLabel("No run yet. Use “Run batch” on the Scenarios tab.")
@@ -30,8 +41,16 @@ class RunPanel(QWidget):
         self.summary = QPlainTextEdit(readOnly=True)
         self.summary.setFixedHeight(150)
         self.summary.setPlaceholderText("Run summary appears here when a scenario finishes.")
+        self.stop_button = QPushButton("Stop")
+        self.stop_button.setToolTip("Stop the run now: ends Claude Code and everything it started")
+        self.stop_button.setStyleSheet("QPushButton:enabled { background: #da3633; color: white; font-weight: bold; }")
+        self.stop_button.setEnabled(False)
+        self.stop_button.clicked.connect(self.stop_requested)
+        header_row = QHBoxLayout()
+        header_row.addWidget(self.header, 1)
+        header_row.addWidget(self.stop_button)
         layout = QVBoxLayout(self)
-        layout.addWidget(self.header)
+        layout.addLayout(header_row)
         layout.addWidget(self.events, 1)
         layout.addWidget(self.summary)
 
@@ -51,7 +70,11 @@ class RunPanel(QWidget):
 
     def scenario_finished(self, outcome: RunOutcome, title: str) -> None:
         s = outcome.summary
-        lines = [f"■ {title}: " + ("finished" if s and s.ok else f"ended (exit code {outcome.exit_code})")]
+        if outcome.stopped:
+            status = "stopped by you"
+        else:
+            status = "finished" if s and s.ok else f"ended (exit code {outcome.exit_code})"
+        lines = [f"■ {title}: {status}"]
         if s:
             lines.append(
                 f"  {s.num_turns} turns, {((s.duration_ms or 0) / 1000):.0f} s, "
@@ -73,8 +96,16 @@ class RunPanel(QWidget):
         self.summary.appendPlainText("\n".join(lines) + "\n")
         self._add(lines[0], QColor(46, 160, 67) if s and s.ok else QColor(218, 54, 51), bold=True)
 
-    def all_finished(self) -> None:
-        self.header.setText("Run finished. Review the steps on the Scenarios tab.")
+    def set_running(self, running: bool) -> None:
+        self.stop_button.setEnabled(running)
+
+    def all_finished(self, stopped: bool = False) -> None:
+        self.set_running(False)
+        self.header.setText(
+            "Run stopped. Steps reached so far are on the Scenarios tab."
+            if stopped
+            else "Run finished. Review the steps on the Scenarios tab."
+        )
 
     def _add(self, text: str, color: QColor, bold: bool = False) -> QListWidgetItem:
         at_bottom = self.events.verticalScrollBar().value() >= self.events.verticalScrollBar().maximum() - 4
