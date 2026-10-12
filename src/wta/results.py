@@ -13,6 +13,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from wta.db.database import Database
+from wta.settings import SCREENSHOTS_BUG_BLOCKED, SCREENSHOTS_EVERY_STEP, SCREENSHOTS_ONCE_PER_PAGE
 from wta.db.models import (
     BUG_PRIORITIES,
     BUG_SEVERITIES,
@@ -240,12 +241,30 @@ def screenshot_path(run_dir: Path, relative: str | None) -> Path | None:
     return path
 
 
+EVIDENCE_STATUSES = frozenset({StepStatus.BLOCKED, StepStatus.FAIL})
+
+
+def screenshot_rule(timing: str, smoke: bool, step: StepResult) -> tuple[bool, bool]:
+    """(keep a screenshot for this step, a screenshot is required) for the screenshot timing setting.
+
+    Blocked and Bug steps always need one. "Every step" keeps all. "Once per smoke-test page"
+    also keeps the first check's screenshot on smoke runs; on scenario runs it acts like the default.
+    """
+    evidence = step.status in EVIDENCE_STATUSES
+    if timing == SCREENSHOTS_EVERY_STEP:
+        return True, True
+    if timing == SCREENSHOTS_ONCE_PER_PAGE and smoke and step.order == 1:
+        return True, True
+    return evidence, evidence
+
+
 def apply_results(
     db: Database,
     scenario_id: int,
     results: Results,
     run_dir: Path,
-    screenshot_statuses: frozenset[StepStatus] = frozenset({StepStatus.BLOCKED, StepStatus.FAIL}),
+    screenshot_timing: str = SCREENSHOTS_BUG_BLOCKED,
+    smoke: bool = False,
     redact=lambda text: text,
 ) -> list[str]:
     """Write Claude's results into the scenario's steps. Returns extra problems found."""
@@ -289,10 +308,11 @@ def apply_results(
             if r.status == StepStatus.FAIL and r.bug is None:
                 problems.append(f"Step {r.order} is a bug but has no bug report yet")
 
-            shot = screenshot_path(run_dir, r.screenshot) if r.status in screenshot_statuses else None
-            if r.status in screenshot_statuses and r.screenshot and shot is None:
+            keep, required = screenshot_rule(screenshot_timing, smoke, r)
+            shot = screenshot_path(run_dir, r.screenshot) if keep else None
+            if keep and r.screenshot and shot is None:
                 problems.append(f"Step {r.order}: screenshot {r.screenshot!r} not found in the run folder")
-            if r.status in screenshot_statuses and not r.screenshot:
+            if required and not r.screenshot:
                 problems.append(f"Step {r.order} is {r.status.value} but has no screenshot")
             current = [s for s in step.screenshots if shot is not None and Path(s.file_path) == shot]
             step.screenshots[:] = current or (

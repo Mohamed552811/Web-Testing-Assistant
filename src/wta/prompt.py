@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass, field
 
 from wta.results import BUG_EXAMPLE, RESULTS_FILE, SCHEMA_EXAMPLE, SCREENSHOT_DIR
+from wta.settings import SCREENSHOTS_EVERY_STEP, SCREENSHOTS_ONCE_PER_PAGE, SCREENSHOTS_BUG_BLOCKED
 
 
 @dataclass
@@ -19,6 +20,7 @@ class RunContext:
     confirm_risky_actions: bool = False
     site_notes: list[str] = field(default_factory=list)
     smoke: "SmokeContext | None" = None
+    screenshot_timing: str = SCREENSHOTS_BUG_BLOCKED
 
 
 @dataclass
@@ -109,6 +111,17 @@ def _work_intro(ctx: RunContext) -> str:
     )
 
 
+def _screenshot_rule(ctx: RunContext) -> str:
+    how = (f'take one with the screenshot tool using filename "{SCREENSHOT_DIR}/step-<order>.png" '
+           'and put that relative path in "screenshot"')
+    if ctx.screenshot_timing == SCREENSHOTS_EVERY_STEP:
+        return f"- Screenshots for EVERY step: after each step {how}."
+    if ctx.screenshot_timing == SCREENSHOTS_ONCE_PER_PAGE and ctx.smoke is not None:
+        return (f'- Screenshots for step 1 (one view of the page) and for every "fail" and "blocked" step: {how}. '
+                'For other steps "screenshot" is null.')
+    return f'- Screenshots ONLY for "fail" and "blocked" steps: {how}. For other steps "screenshot" is null.'
+
+
 def build_prompt(ctx: RunContext) -> str:
     domains = ", ".join(ctx.allowed_domains) or "(none)"
     account = (
@@ -141,7 +154,7 @@ def build_prompt(ctx: RunContext) -> str:
 - Step status: "pass" (worked as expected), "fail" (a product bug), "blocked" (could not be checked: captcha, outside allowed domains, environment down, missing data), "not_run" (planned but not reached).
 - "reasoning": a short written explanation of what you saw and why you chose the status.
 - "page_url": the page URL after the step. "console_errors" / "failed_requests": fill them in when the tool output reports errors, or on fail and blocked steps (use the console and network tools then). Otherwise leave them empty.
-- Screenshots ONLY for "fail" and "blocked" steps: take one with the screenshot tool using filename "{SCREENSHOT_DIR}/step-<order>.png" and put that relative path in "screenshot". For other steps "screenshot" is null.
+{_screenshot_rule(ctx)}
 - Screenshots are evidence for the user, not a way to look at the page: use snapshots to see the page, and never take any other screenshots.
 - Every "fail" step needs a "bug" object (fields follow Azure DevOps / TFS Bug work items; severity is one of "1 - Critical", "2 - High", "3 - Medium", "4 - Low"; priority is 1 to 4). Other steps have "bug": null.
 

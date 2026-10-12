@@ -280,7 +280,8 @@ class ScenarioRun(QObject):
         self._results_mtime = mtime
         self._last_results = results
         problems = results.problems + apply_results(
-            self.db, self.job.scenario_id, results, self.job.run_dir, redact=self.redact
+            self.db, self.job.scenario_id, results, self.job.run_dir, redact=self.redact,
+            screenshot_timing=self.job.context.screenshot_timing, smoke=self.job.context.smoke is not None,
         )
         self.outcome.notices = [self.redact(n) for n in results.notices]
         self.outcome.problems = problems
