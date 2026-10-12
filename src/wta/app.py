@@ -27,11 +27,14 @@ from wta.domain_guard import NavigationGuard
 from wta.processes import ProcessRegistry
 from wta.results import ConfirmationRequest
 from wta.db import Database, store
+from wta.db import runs as run_store
 from wta.db import scenarios as sc
+from wta.db import site_notes
 from wta.db.models import TestSession
 from wta.paths import data_dir, database_path
 from wta.prompt import RunContext
 from wta.run_panel import RunPanel
+from wta.runs_tab import RunsTab
 from wta.runner import BatchRun, RunOutcome, ScenarioJob, ScenarioRun, default_runs_dir, run_folder
 from wta.scenario_tab import ScenarioTab
 from wta.session_dialogs import OpenSessionDialog, SessionDialog
@@ -97,6 +100,8 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.addTab(self.scenario_tab, "Scenarios")
         self.tabs.addTab(self.run_panel, "Live run")
+        self.runs_tab = RunsTab(db, self)
+        self.tabs.addTab(self.runs_tab, "Runs")
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.browser)
@@ -222,6 +227,7 @@ class MainWindow(QMainWindow):
         self.current_session = session
         self._update_title()
         self.scenario_tab.set_session(session.id)
+        self.runs_tab.set_session(session.id, site_notes.site_for_url(session.target_url))
         self.browser.set_viewport(session.viewport_width, session.viewport_height)
         self.browser.view.load(QUrl(session.target_url))
         self.statusBar().showMessage(f"Opened session “{session.name}”")
@@ -278,6 +284,7 @@ class MainWindow(QMainWindow):
                 return
 
         runs_dir = default_runs_dir(self.app_dir)
+        notes = [n.note for n in site_notes.list_notes(self.db, site_notes.site_for_url(session.target_url))]
         jobs = [
             ScenarioJob(
                 scenario_id=scenario.id,
@@ -292,6 +299,7 @@ class MainWindow(QMainWindow):
                     scenario_name=scenario.name,
                     scenario_goal=scenario.goal,
                     scenario_test_data=scenario.test_data,
+                    site_notes=notes,
                     confirm_risky_actions=self.settings.confirm_risky_actions,
                 ),
             )
@@ -359,6 +367,7 @@ class MainWindow(QMainWindow):
         title = next((j.title for j in self.batch_run.jobs if j.scenario_id == outcome.scenario_id), "Scenario")
         self.run_panel.scenario_finished(outcome, title)
         self.scenario_tab.refresh(outcome.scenario_id)
+        self.runs_tab.refresh()
 
     def _batch_finished(self) -> None:
         if self.guard is not None:
@@ -367,7 +376,9 @@ class MainWindow(QMainWindow):
         self.batch_run.deleteLater()
         self.batch_run = None
         self._update_run_state()
-        self.statusBar().showMessage("Run finished. Review each step on the Scenarios tab.")
+        self.statusBar().showMessage(
+            "Run finished. Review each step on the Scenarios tab; add site notes on the Runs tab."
+        )
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if self.batch_run is not None:
@@ -386,6 +397,7 @@ def main(argv: list[str] | None = None) -> int:
     app = QApplication(argv + cdp.enable(cdp_port))  # must happen before QApplication
     app.setApplicationName(APP_TITLE)
     db = Database(database_path())
+    run_store.mark_interrupted_runs(db)  # runs cut off by a crash or kill last time
     profile = make_profile(data_dir() / "browser-profile", app)
     guard = NavigationGuard(app)
     profile.setUrlRequestInterceptor(guard)

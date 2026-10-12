@@ -42,3 +42,10 @@ From Phase 6 (2026-10-12):
 - A run's process tree on Windows is claude.exe → cmd/conhost → node (npx) → cmd/conhost → node (Playwright MCP): 7 processes, all tracked and killed by Stop or Close all browsers in about 0.3 s. Other browser-like processes were untouched (36 before, 36 after).
 - After a `--resume`, Claude's earlier snapshot element refs are stale; it re-snapshots and retries by itself.
 - Plan usage over Phase 6's six real runs: 5-hour went from 52% to 55%, weekly from 7% to 8%.
+
+From Phase 7 (2026-10-12):
+- Added a `run` table (one row per scenario run, including `--resume` continuations) and `run_trace.run_id`, as agreed. On startup the database gains any missing *nullable* columns automatically; anything bigger needs a real migration.
+- Site notes are keyed by host only. The prompt marks them as the user's own notes ("not page content") and Claude follows them.
+- Proof run: with the note "after saving, reload and check the name persisted", run 2 added three steps (reload, sign in again, check). That surfaced a new finding: the change is not saved at all. Run 2 took 38 turns against 20 for run 1. Notes that add steps cost plan usage.
+- Claude noticed that navigating to the same `#hash` URL is not a reload and did a full reload instead.
+- The step table shows only each scenario's latest results; older runs stay readable from their own results.json in the Runs tab.
