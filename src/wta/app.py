@@ -2,6 +2,7 @@
 
 import sys
 import threading
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QTimer, QUrl, Signal
@@ -10,6 +11,7 @@ from PySide6.QtWebEngineCore import QWebEngineProfile, qWebEngineChromiumVersion
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
+    QFileDialog,
     QMainWindow,
     QMessageBox,
     QSplitter,
@@ -39,6 +41,8 @@ from wta.runs_tab import RunsTab
 from wta.runner import BatchRun, RunOutcome, ScenarioJob, ScenarioRun, default_runs_dir, run_folder
 from wta.scenario_tab import ScenarioTab
 from wta.session_dialogs import OpenSessionDialog, SessionDialog
+from wta.settings_dialog import SettingsDialog
+from wta.export import export_report
 from wta.usage_bar import TopBar
 
 APP_TITLE = "Web Testing Assistant"
@@ -136,14 +140,21 @@ class MainWindow(QMainWindow):
         self.new_action = QAction("&New session…", self, shortcut=QKeySequence.StandardKey.New)
         self.open_action = QAction("&Open session…", self, shortcut=QKeySequence.StandardKey.Open)
         self.details_action = QAction("Session &details…", self, enabled=False)
+        self.export_action = QAction("&Export report…", self, enabled=False, shortcut=QKeySequence("Ctrl+E"))
+        self.settings_action = QAction("Se&ttings…", self, shortcut=QKeySequence("Ctrl+,"))
         quit_action = QAction("&Quit", self, shortcut=QKeySequence.StandardKey.Quit)
 
         self.new_action.triggered.connect(self.new_session)
         self.open_action.triggered.connect(self.open_session)
         self.details_action.triggered.connect(self.edit_session)
+        self.export_action.triggered.connect(self.export_report)
+        self.settings_action.triggered.connect(self.edit_settings)
         quit_action.triggered.connect(self.close)
 
         menu.addActions([self.new_action, self.open_action, self.details_action])
+        menu.addSeparator()
+        menu.addAction(self.export_action)
+        menu.addAction(self.settings_action)
         menu.addSeparator()
         menu.addAction(quit_action)
 
@@ -155,22 +166,42 @@ class MainWindow(QMainWindow):
         close_all.triggered.connect(self.close_all_browsers)
         browser_menu.addAction(close_all)
 
-        run_menu = self.menuBar().addMenu("&Run")
-        self.confirm_action = QAction("Confirm risky actions before Claude does them", self, checkable=True)
-        self.confirm_action.setChecked(self.settings.confirm_risky_actions)
-        self.confirm_action.setToolTip(
-            "Claude pauses before deleting, sending, paying or other irreversible actions and asks you first."
-        )
-        self.confirm_action.toggled.connect(self._set_confirm_risky)
-        run_menu.addAction(self.confirm_action)
-
-    def _set_confirm_risky(self, enabled: bool) -> None:
-        self.settings.confirm_risky_actions = enabled
+    def edit_settings(self) -> None:
+        dialog = SettingsDialog(self.settings, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self.settings = dialog.settings()
         app_settings.save(self.app_dir / SETTINGS_FILE, self.settings)
-        self.statusBar().showMessage(
-            "Claude will ask before risky actions (from the next run)." if enabled
-            else "Claude will not pause before risky actions.", 5000
-        )
+        self.statusBar().showMessage("Settings saved.", 5000)
+
+    def export_report(self, path: Path | None = None) -> Path | None:
+        """Export the open session's report in the default format (Settings) or the one chosen."""
+        if self.current_session is None:
+            return None
+        fmt = self.settings.export_format
+        if path is not None and path.suffix.lstrip(".").lower() in app_settings.EXPORT_FORMATS:
+            fmt = path.suffix.lstrip(".").lower()  # an explicit file name decides the format
+        if path is None:
+            stamp = datetime.now().strftime("%Y%m%d-%H%M")
+            safe_name = "".join(c if c.isalnum() or c in "-_ " else "_" for c in self.current_session.name).strip()
+            default = self.app_dir / "exports" / f"{safe_name or 'report'}-{stamp}.{fmt}"
+            default.parent.mkdir(parents=True, exist_ok=True)
+            filters = [f"{label} (*.{key})" for key, label in app_settings.EXPORT_FORMATS.items()]
+            selected = next(f for f in filters if f.endswith(f"(*.{fmt})"))
+            chosen, chosen_filter = QFileDialog.getSaveFileName(
+                self, "Export report", str(default), ";;".join(filters), selected
+            )
+            if not chosen:
+                return None
+            path = Path(chosen)
+            fmt = chosen_filter.rsplit("*.", 1)[-1].rstrip(")") if chosen_filter else fmt
+        try:
+            written = export_report(self.db, self.current_session.id, path, fmt)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Export report", f"Could not export the report:\n{exc}")
+            return None
+        self.statusBar().showMessage(f"Report exported to {written}", 10000)
+        return written
 
     def _check_cdp(self) -> None:
         self._cdp_attempts += 1
@@ -264,6 +295,7 @@ class MainWindow(QMainWindow):
         self.new_action.setEnabled(not running)
         self.open_action.setEnabled(not running)
         self.details_action.setEnabled(not running and self.current_session is not None)
+        self.export_action.setEnabled(self.current_session is not None)
 
     def _site_notes_for(self, url: str) -> list[str]:
         return [n.note for n in site_notes.list_notes(self.db, site_notes.site_for_url(url))]
@@ -311,6 +343,7 @@ class MainWindow(QMainWindow):
                     scenario_test_data=scenario.test_data,
                     site_notes=self._site_notes_for(scenario.smoke_page.url if scenario.smoke_page else session.target_url),
                     confirm_risky_actions=self.settings.confirm_risky_actions,
+                    screenshot_timing=self.settings.screenshot_timing,
                     smoke=SmokeContext(**vars(sc.SmokePageInput.of(scenario.smoke_page))) if scenario.smoke_page else None,
                 ),
             )

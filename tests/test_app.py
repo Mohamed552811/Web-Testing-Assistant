@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+if os.name == "nt":  # the offscreen platform has no fonts of its own; text would render as boxes
+    os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"))
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -38,6 +40,20 @@ class MainWindowTests(unittest.TestCase):
         # Sign-in check skipped and no debug port: running is blocked, with the reason shown.
         self.assertFalse(window.scenario_tab.run_button.isEnabled())
         self.assertIn("signed in", window.scenario_tab.run_button.toolTip())
+        window.deleteLater()
+
+    def test_export_uses_file_extension_or_default_format(self):
+        window = MainWindow(self.db, app_dir=Path(self.tmp.name), check_sign_in=False)
+        self.assertFalse(window.export_action.isEnabled())  # no session yet
+        session = store.create_session(self.db, store.SessionDetails(name="S", target_url="https://a.example.com"))
+        window.show_session(session)
+        self.assertTrue(window.export_action.isEnabled())
+        out = Path(self.tmp.name) / "out"
+        for fmt in ("xlsx", "pdf", "docx", "md"):
+            self.assertEqual(window.export_report(out / f"r.{fmt}"), out / f"r.{fmt}")
+            self.assertTrue((out / f"r.{fmt}").is_file(), fmt)
+        window.settings.export_format = "md"
+        self.assertEqual(window.export_report(out / "no-extension"), out / "no-extension.md")
         window.deleteLater()
 
     def test_closing_the_app_closes_tracked_processes(self):

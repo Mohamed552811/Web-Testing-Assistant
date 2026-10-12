@@ -56,3 +56,10 @@ From Phase 8 (2026-10-12):
 - Claude took extra "visual check" screenshots on passing checks until the prompt said screenshots are evidence only. After that the folder held only Bug/Blocked screenshots.
 - Smoke cost depends mostly on how many links Claude opens. First practice-page run: 52 turns, about 11% of the 5-hour window. After "check link targets from the snapshot, open at most two": 37 turns, about 3%.
 - practicetestautomation.com login page: 14 checks, all Pass. Valid published credentials deliberately not used to sign in (third-party site). The local Profile page smoke run produced 5 Bugs, each with a bug report and one screenshot.
+
+From Phase 9 (2026-10-12):
+- Exports are built from one report model and use the user's final status, with Claude's status alongside. A bug is left out when the user reviewed its step as anything other than Fail/Bug; unreviewed and re-run bugs stay, labelled.
+- Claude writes the test account email into repro steps ("sign in as …"). Exports replace the account email and password with "the test account" / "the test password" in every text field.
+- openpyxl needs Pillow only to read image size and bytes. `wta.export.xlsx.PngImage` reads both from the PNG header instead, so openpyxl is pinned to 3.1.x.
+- PDF is rendered by Qt (QTextDocument → QPdfWriter). Under the offscreen test platform Qt has no fonts unless QT_QPA_FONTDIR is set; the real app (windows platform) is unaffected.
+- All four formats of two real sessions were opened in Microsoft Excel and Word (read-only) with no repair prompts. The Bugs sheet uses Azure DevOps column names (Work Item Type, Title, Repro Steps, Severity, Priority, Tags).
