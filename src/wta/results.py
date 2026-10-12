@@ -97,6 +97,16 @@ class StepResult:
 
 
 @dataclass
+class ConfirmationRequest:
+    step: int | None
+    action: str
+    reason: str
+
+
+AWAITING_CONFIRMATION = "awaiting_confirmation"
+
+
+@dataclass
 class Results:
     scenario: str
     state: str
@@ -104,6 +114,7 @@ class Results:
     notices: list[str]
     steps: list[StepResult]
     problems: list[str] = field(default_factory=list)  # what was wrong in the file, for the run panel
+    confirmation: ConfirmationRequest | None = None
 
 
 def _text(value) -> str:
@@ -184,13 +195,27 @@ def parse_results(data) -> Results:
             )
         )
     steps.sort(key=lambda s: s.order)
+    state = _text(data.get("state")) or "running"
+    confirmation = None
+    raw_request = data.get("confirmation_request")
+    if state == AWAITING_CONFIRMATION:
+        if isinstance(raw_request, dict) and _text(raw_request.get("action")):
+            step = raw_request.get("step")
+            confirmation = ConfirmationRequest(
+                step=step if isinstance(step, int) else None,
+                action=_text(raw_request.get("action")),
+                reason=_text(raw_request.get("reason")),
+            )
+        else:
+            problems.append("state is awaiting_confirmation but confirmation_request is missing")
     return Results(
         scenario=_text(data.get("scenario")),
-        state=_text(data.get("state")) or "running",
+        state=state,
         summary=_text(data.get("summary")),
         notices=_strings(data.get("notices")),
         steps=steps,
         problems=problems,
+        confirmation=confirmation,
     )
 
 

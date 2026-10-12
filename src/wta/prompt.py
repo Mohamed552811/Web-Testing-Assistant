@@ -16,6 +16,23 @@ class RunContext:
     scenario_name: str
     scenario_goal: str
     scenario_test_data: str
+    confirm_risky_actions: bool = False
+
+
+RISKY_ACTIONS = (
+    "deleting or archiving data, sending messages, emails or invitations, payments or purchases, "
+    "changing passwords, security or account settings, or anything else that cannot be undone"
+)
+
+
+def _risky_section(confirm: bool) -> str:
+    if not confirm:
+        return f"## Risky actions\nRisky actions ({RISKY_ACTIONS}) are allowed only when the scenario asks for them."
+    return f"""## Risky actions need the user's confirmation
+Before a risky action ({RISKY_ACTIONS}), do NOT do it yet. Instead:
+1. Write {RESULTS_FILE} with all steps so far, "state": "awaiting_confirmation" and
+   "confirmation_request": {{"step": <order of the step>, "action": "<exactly what you would click or submit>", "reason": "<why the scenario needs it>"}}.
+2. End your turn immediately with one short sentence. You will be resumed with the user's decision."""
 
 
 def build_prompt(ctx: RunContext) -> str:
@@ -66,6 +83,8 @@ Bug object format:
 ```json
 {json.dumps(BUG_EXAMPLE, indent=2)}
 ```
+
+{_risky_section(ctx.confirm_risky_actions)}
 
 When done, reply with a two-sentence summary.
 """

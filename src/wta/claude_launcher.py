@@ -30,6 +30,11 @@ PLAYWRIGHT_RUN_TOOLS = tuple(
         "console_messages", "network_requests", "network_request",
     )
 )
+# Denied outright as well, so they are not offered to Claude at all where Claude Code allows that.
+PLAYWRIGHT_DENIED_TOOLS = tuple(
+    f"mcp__{MCP_SERVER_NAME}__browser_{name}"
+    for name in ("evaluate", "run_code_unsafe", "file_upload", "close", "install")
+)
 # Built-in tools for writing results.json and screenshots; --restricted confines them to the run folder.
 FILE_TOOLS = ("Read", "Write", "Edit")
 # Never passed to Claude Code, so it always uses the user's subscription login.
@@ -99,10 +104,12 @@ def check_sign_in(timeout: float = 60) -> SignInStatus:
     return parse_auth_status(done.returncode, done.stdout)
 
 
-def run_args(mcp_config: Path) -> list[str]:
+def run_args(mcp_config: Path, resume_session: str | None = None) -> list[str]:
     """Arguments (after the executable) for a test run. The prompt is written to stdin,
-    so the test account never appears on a command line."""
-    return [
+    so the test account never appears on a command line. `resume_session` continues an
+    earlier run (used after the user answers a confirmation request)."""
+    resume = ["--resume", resume_session] if resume_session else []
+    return resume + [
         "-p",
         "--output-format", "stream-json",
         "--verbose",
@@ -113,6 +120,7 @@ def run_args(mcp_config: Path) -> list[str]:
         "--restricted",
         "--tools=" + ",".join(FILE_TOOLS),
         "--allowedTools", ",".join(FILE_TOOLS + PLAYWRIGHT_RUN_TOOLS),
+        "--disallowedTools", ",".join(PLAYWRIGHT_DENIED_TOOLS),
         "--permission-mode", "dontAsk",
     ]
 
