@@ -1,11 +1,15 @@
 """Embedded browser: URL bar, navigation buttons and a QWebEngineView."""
 
+from pathlib import Path
+
 from PySide6.QtCore import QUrl, Signal
+from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLineEdit,
     QProgressBar,
+    QScrollArea,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -13,14 +17,32 @@ from PySide6.QtWidgets import (
 
 from wta.urls import normalize_url
 
+PROFILE_NAME = "wta-browser"
+
+
+def make_profile(storage_dir: Path, parent=None) -> QWebEngineProfile:
+    """A dedicated, on-disk profile so the app's cookies and cache stay apart from other browsers."""
+    profile = QWebEngineProfile(PROFILE_NAME, parent)
+    profile.setPersistentStoragePath(str(storage_dir / "storage"))
+    profile.setCachePath(str(storage_dir / "cache"))
+    return profile
+
 
 class BrowserPane(QWidget):
     status_message = Signal(str)
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, profile: QWebEngineProfile | None = None) -> None:
         super().__init__(parent)
 
         self.view = QWebEngineView(self)
+        if profile is not None:
+            self.view.setPage(QWebEnginePage(profile, self.view))
+        # The view fills the pane unless a session viewport is set; then it gets that exact
+        # size and the scroll area lets it be larger than the pane.
+        self.viewport_area = QScrollArea(self)
+        self.viewport_area.setWidget(self.view)
+        self.viewport_area.setWidgetResizable(True)
+        self.viewport_area.setFrameShape(QScrollArea.Shape.NoFrame)
 
         self.back_button = QToolButton(text="◀", toolTip="Back")
         self.forward_button = QToolButton(text="▶", toolTip="Forward")
@@ -42,7 +64,7 @@ class BrowserPane(QWidget):
         layout.setSpacing(0)
         layout.addLayout(toolbar)
         layout.addWidget(self.progress)
-        layout.addWidget(self.view, 1)
+        layout.addWidget(self.viewport_area, 1)
 
         self.back_button.clicked.connect(self.view.back)
         self.forward_button.clicked.connect(self.view.forward)
@@ -53,6 +75,16 @@ class BrowserPane(QWidget):
         self.view.loadStarted.connect(self._on_load_started)
         self.view.loadProgress.connect(self.progress.setValue)
         self.view.loadFinished.connect(self._on_load_finished)
+
+    def set_viewport(self, width: int, height: int) -> None:
+        """Give the page exactly width x height CSS pixels (at 100% zoom)."""
+        self.view.setFixedSize(width, height)
+        self.viewport_area.setWidgetResizable(False)
+
+    def clear_viewport(self) -> None:
+        self.view.setMinimumSize(0, 0)
+        self.view.setMaximumSize(16777215, 16777215)
+        self.viewport_area.setWidgetResizable(True)
 
     def _navigate_from_bar(self) -> None:
         url = normalize_url(self.url_bar.text())

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>WTA test form</title>
+<style>body{font-family:sans-serif;margin:40px}input,button{font-size:18px;padding:6px}#out{margin-top:20px;font-size:22px;color:#0a7}</style></head>
+<body>
+<h1>WTA test form</h1>
+<label for="name">Your name</label>
+<input id="name" name="name" placeholder="Type a name">
+<button id="greet" type="button">Greet</button>
+<div id="out" role="status"></div>
+<script>
+document.getElementById('greet').addEventListener('click', () => {
+  document.getElementById('out').textContent = 'Hello, ' + document.getElementById('name').value + '!';
+});
+</script>
+</body>
+</html>

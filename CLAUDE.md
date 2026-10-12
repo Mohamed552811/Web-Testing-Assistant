@@ -25,3 +25,4 @@ credentials or OAuth tokens, never call Anthropic usage endpoints.
   and Playwright MCP options; do not guess them.
 - Ask before editing `~/.claude/settings.json`; chain to an existing statusLine instead of replacing it.
 - Run the app: `.venv\Scripts\python -m wta` (from the repo root). Run tests: `.venv\Scripts\python -m unittest discover -s tests`.
+- Local test pages live in `test_pages/`. Serve them with `.venvScriptspython -m http.server 8765 --bind 127.0.0.1 --directory test_pages`.
