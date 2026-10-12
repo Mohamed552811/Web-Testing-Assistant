@@ -20,7 +20,9 @@ def data_dir() -> Path:
         base = os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share"
         path = Path(base) / APP_DIR_NAME
     path.mkdir(parents=True, exist_ok=True)
-    return path
+    # Resolve to the long, final form: Claude Code compares file paths against its working
+    # directory, and a Windows 8.3 short name (e.g. MOHAME~1) makes writes look outside it.
+    return path.resolve()
 
 
 def database_path() -> Path:

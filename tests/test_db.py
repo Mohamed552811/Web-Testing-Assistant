@@ -215,7 +215,7 @@ class PathsTests(unittest.TestCase):
             old = os.environ.get("WTA_DATA_DIR")
             os.environ["WTA_DATA_DIR"] = str(target)
             try:
-                self.assertEqual(data_dir(), target)
+                self.assertEqual(data_dir(), target.resolve())
                 self.assertTrue(target.is_dir())
             finally:
                 if old is None:

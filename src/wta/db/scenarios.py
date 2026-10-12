@@ -244,3 +244,24 @@ def override_step(db: Database, step_id: int, final_status: StepStatus, comment:
 def request_rerun(db: Database, step_id: int, comment: str = "") -> Review:
     """Mark the step for another run. It is not final until reviewed again."""
     return _add_review(db, step_id, ReviewDecision.RERUN_REQUESTED, None, comment)
+
+
+# --- running -----------------------------------------------------------------
+
+
+def scenarios_to_run(db: Database, session_id: int, batch: int) -> list[tuple[Scenario, bool]]:
+    """Scenarios in the batch that need a run, with True when it is a re-run.
+
+    A scenario needs a run when it has no steps yet, or when any step's latest review
+    asks for a re-run. Fully reviewed or pending-review scenarios are left alone.
+    """
+    with db.Session() as orm:
+        selected = []
+        for scenario in _batch_scenarios(orm, session_id, batch):
+            if scenario.kind != ScenarioKind.SCENARIO:
+                continue
+            if not scenario.steps:
+                selected.append((scenario, False))
+            elif any(step.rerun_requested for step in scenario.steps):
+                selected.append((scenario, True))
+        return selected
