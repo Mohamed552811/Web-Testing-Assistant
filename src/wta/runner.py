@@ -17,7 +17,8 @@ from PySide6.QtCore import QByteArray, QIODevice, QObject, QProcess, QProcessEnv
 
 from wta import claude_launcher, processes, usage
 from wta.db.database import Database
-from wta.db.models import RunTrace, TraceKind
+from wta.db import runs
+from wta.db.models import RunOutcomeKind, TraceKind
 from wta.prompt import RunContext, build_prompt
 from wta.processes import ProcessRegistry
 from wta.results import (
@@ -112,6 +113,7 @@ class ScenarioRun(QObject):
         self._ticks = 0
         self._done = False
         self.outcome = RunOutcome(job.scenario_id, -1, None, usage_at_start=usage.load(usage_path))
+        self.run_id: int | None = None
         self._poll = QTimer(self, interval=RESULTS_POLL_MS)
         self._poll.timeout.connect(self._tick)
 
@@ -125,7 +127,17 @@ class ScenarioRun(QObject):
         prompt = build_prompt(self.job.context)
         (run_dir / "prompt.md").write_text(self.redact(prompt), encoding="utf-8")
         self._trace_file = open(run_dir / "trace.jsonl", "w", encoding="utf-8")
+        before = self.outcome.usage_at_start
+        self.run_id = runs.start_run(
+            self.db, self.job.scenario_id, run_dir,
+            five_hour_before=before["five_hour"].percent if "five_hour" in before else None,
+            seven_day_before=before["seven_day"].percent if "seven_day" in before else None,
+            site_notes_used=len(self.job.context.site_notes),
+        )
         self._emit(TraceKind.NOTE, f"Starting Claude Code in {run_dir}")
+        if self.job.context.site_notes:
+            self._emit(TraceKind.NOTE, f"Using {len(self.job.context.site_notes)} site note(s): "
+                       + " | ".join(self.job.context.site_notes))
         self._launch(prompt)
 
     def _launch(self, stdin_text: str, resume: str | None = None) -> None:
@@ -235,8 +247,7 @@ class ScenarioRun(QObject):
 
     def _emit(self, kind: TraceKind, text: str, tool: str = "") -> None:
         text = self.redact(text)
-        with self.db.Session.begin() as orm:
-            orm.add(RunTrace(scenario_id=self.job.scenario_id, kind=kind, text=text))
+        runs.add_trace(self.db, self.job.scenario_id, self.run_id, kind, text)
         self.event.emit(TraceEvent(kind, text, tool))
 
     def add_note(self, text: str) -> None:
@@ -322,7 +333,33 @@ class ScenarioRun(QObject):
         self.outcome.stderr_tail = self.redact(tail)
         if not (self.job.run_dir / RESULTS_FILE).exists():
             self.outcome.problems.append("Claude did not write results.json")
+        self._record_run_end()
         self.finished.emit(self.outcome)
+
+    def _record_run_end(self) -> None:
+        if self.run_id is None:
+            return
+        s = self.outcome.summary
+        if self.stopped:
+            outcome = RunOutcomeKind.STOPPED
+        elif s is not None and s.ok and self.outcome.exit_code == 0:
+            outcome = RunOutcomeKind.FINISHED
+        else:
+            outcome = RunOutcomeKind.FAILED
+        seen = self.outcome.usage_seen
+        runs.finish_run(self.db, self.run_id, runs.RunEnd(
+            outcome=outcome,
+            exit_code=self.outcome.exit_code,
+            num_turns=s.num_turns if s else None,
+            duration_ms=s.duration_ms if s else None,
+            input_tokens=s.input_tokens if s else 0,
+            output_tokens=s.output_tokens if s else 0,
+            cache_read_tokens=s.cache_read_tokens if s else 0,
+            cache_creation_tokens=s.cache_creation_tokens if s else 0,
+            five_hour_seen=seen["five_hour"].percent if "five_hour" in seen else None,
+            seven_day_seen=seen["seven_day"].percent if "seven_day" in seen else None,
+            summary=self.redact(s.text) if s else "",
+        ))
 
 
 class BatchRun(QObject):

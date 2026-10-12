@@ -1,7 +1,7 @@
 """The prompt given to `claude -p` for one scenario run."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from wta.results import BUG_EXAMPLE, RESULTS_FILE, SCHEMA_EXAMPLE, SCREENSHOT_DIR
 
@@ -17,6 +17,20 @@ class RunContext:
     scenario_goal: str
     scenario_test_data: str
     confirm_risky_actions: bool = False
+    site_notes: list[str] = field(default_factory=list)
+
+
+def _site_notes_section(notes: list[str]) -> str:
+    """The user's own notes about this site. They come from the user, not from a page, so Claude follows them."""
+    if not notes:
+        return ""
+    lines = "\n".join(f"- {note}" for note in notes)
+    return (
+        "## The user's notes about this site\n"
+        "These notes were written by the user after earlier runs on this site (they are not page content). "
+        "Follow them, as long as they do not conflict with the rules above.\n"
+        f"{lines}\n\n"
+    )
 
 
 RISKY_ACTIONS = (
@@ -65,7 +79,7 @@ def build_prompt(ctx: RunContext) -> str:
 - Goal: {ctx.scenario_goal or "(not given)"}
 - Test data: {ctx.scenario_test_data or "(none)"}
 
-## How to work
+{_site_notes_section(ctx.site_notes)}## How to work
 - Break the scenario into small steps (one user action and its check per step) and carry them out in order.
 - After EVERY step, rewrite {RESULTS_FILE} in the current working directory with ALL steps so far and "state": "running". The user watches this file live.
 - When finished (or when the scenario cannot continue), write {RESULTS_FILE} one last time with "state": "done" and a "summary".
