@@ -49,6 +49,8 @@ class StepStatus(enum.StrEnum):
 class ReviewDecision(enum.StrEnum):
     APPROVED = "approved"
     OVERRIDDEN = "overridden"
+    # Sends the step back for another run; it has no final status until reviewed again.
+    RERUN_REQUESTED = "rerun_requested"
 
 
 class TraceKind(enum.StrEnum):
@@ -186,9 +188,14 @@ class Step(Base):
 
     @property
     def final_status(self) -> StepStatus | None:
-        """The reviewed status, or None while the step is not yet reviewed."""
+        """The reviewed status, or None while the step is not final (unreviewed or re-run requested)."""
         review = self.latest_review
         return review.final_status if review else None
+
+    @property
+    def rerun_requested(self) -> bool:
+        review = self.latest_review
+        return review is not None and review.decision == ReviewDecision.RERUN_REQUESTED
 
 
 class Screenshot(Base):
@@ -275,11 +282,17 @@ class Review(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     step_id: Mapped[int] = mapped_column(ForeignKey("step.id", ondelete="CASCADE"), index=True)
     decision: Mapped[ReviewDecision] = mapped_column(_enum(ReviewDecision, "review_decision"))
-    final_status: Mapped[StepStatus] = mapped_column(_enum(StepStatus, "review_final_status"))
+    final_status: Mapped[StepStatus | None] = mapped_column(_enum(StepStatus, "review_final_status"))
     comment: Mapped[str] = mapped_column(Text, default="")
     reviewed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     step: Mapped[Step] = relationship(back_populates="reviews")
+
+    __table_args__ = (
+        CheckConstraint(
+            "(decision = 'rerun_requested') = (final_status IS NULL)", name="ck_review_final_status"
+        ),
+    )
 
 
 class SiteNote(Base):
