@@ -23,7 +23,7 @@ Tick a phase only after it has been reviewed and accepted.
 - [x] 16. Broader coverage: several test accounts or roles per session; new tabs and pop-ups; file uploads from a fixtures folder; accessibility checks; page speed; errors summary per run.
 - [x] 17. Regression testing: reusable scenario library; compare runs; keep every run's steps; Claude suggests scenarios; import test cases (Excel/CSV, Azure DevOps); test data variables.
 - [x] 18. Housekeeping and insight: highlight the failing element in bug screenshots; search across everything; clean up old runs and back up; trends dashboard.
-- [ ] 19. Windows installer: PyInstaller bundle and Inno Setup Setup.exe with logo, shortcuts and uninstaller (data in %APPDATA% kept); first-start checks for Node.js and Claude Code; one-command build script.
+- [x] 19. Windows installer: PyInstaller bundle and Inno Setup Setup.exe with logo, shortcuts and uninstaller (data in %APPDATA% kept); first-start checks for Node.js and Claude Code; one-command build script.
 
 Parked: send bugs straight to Azure DevOps; a single Claude Code project for app runs.
 
