@@ -19,7 +19,7 @@ Tick a phase only after it has been reviewed and accepted.
 - [x] 12. UI foundation and logo: original bug-and-check logo (title bar, taskbar, welcome screen, About box, installer, shortcuts, report headers, README); light and dark themes with a dark brick-red accent (#9B2D20 light, #C8553D dark); icons on buttons; main toolbar; welcome screen; remembered layout.
 - [x] 13. Review experience: screenshots in the review panel; status badges and summary line; review cards; bug details shown and editable; "Save as site note" on review comments; review keyboard shortcuts; reopen the last session on startup.
 - [x] 14. Live run experience: "Claude is controlling this browser" banner; live run timeline with collapsed output, timer and progress; neater top bar; Windows notification when a run finishes or needs confirmation.
-- [ ] 15. Cost control: usage estimate and automatic pause at 80% of the 5-hour window (changeable); model per run type (Sonnet for smoke tests, default model for scenarios); log in once per batch.
+- [x] 15. Cost control: usage estimate and automatic pause at 80% of the 5-hour window (changeable); model per run type (Sonnet for smoke tests, default model for scenarios); log in once per batch.
 - [ ] 16. Broader coverage: several test accounts or roles per session; new tabs and pop-ups; file uploads from a fixtures folder; accessibility checks; page speed; errors summary per run.
 - [ ] 17. Regression testing: reusable scenario library; compare runs; keep every run's steps; Claude suggests scenarios; import test cases (Excel/CSV, Azure DevOps); test data variables.
 - [ ] 18. Housekeeping and insight: highlight the failing element in bug screenshots; search across everything; clean up old runs and back up; trends dashboard.
