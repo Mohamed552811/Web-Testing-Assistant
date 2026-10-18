@@ -56,6 +56,15 @@ RISKY_ACTIONS = (
 )
 
 
+# Log in once per batch: the embedded browser keeps its cookies between scenarios.
+SIGN_IN_REUSE = (
+    "- The browser keeps its sign-in between scenarios. Take a snapshot first: if you are already signed in as "
+    "this test account, do not sign in again (record a sign-in step as \"pass\" and say you were already signed "
+    "in). If you are signed in as someone else, sign out first. Exception: when the scenario tests signing in or "
+    "out itself, sign out first if needed and follow its steps exactly."
+)
+
+
 def _risky_section(confirm: bool) -> str:
     if not confirm:
         return f"## Risky actions\nRisky actions ({RISKY_ACTIONS}) are allowed only when the scenario asks for them."
@@ -139,7 +148,8 @@ def _screenshot_rule(ctx: RunContext) -> str:
 def build_prompt(ctx: RunContext) -> str:
     domains = ", ".join(ctx.allowed_domains) or "(none)"
     account = (
-        f"- Email: {ctx.test_account_email}\n- Password: {ctx.test_account_password}"
+        f"- Email: {ctx.test_account_email}\n- Password: {ctx.test_account_password}\n"
+        f"{SIGN_IN_REUSE}"
         if ctx.test_account_email
         else "- No test account was given. If a login is needed, mark the step Blocked and add a notice."
     )
