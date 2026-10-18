@@ -59,6 +59,11 @@ def _themed(name: str, role: str | None) -> QIcon:
     return icon(name, _color(role), _color("muted") if role == "on-accent" else None)
 
 
+def themed_icon(name: str, role: str | None = None) -> QIcon:
+    """The icon in the current theme's colour for `role`, not re-tinted later (for list items)."""
+    return _themed(name, role)
+
+
 def set_icon(target, name: str, role: str | None = None) -> None:
     """Give a button or action an icon that follows the theme. `role`: None (text colour), "accent",
     "on-accent" (white, for buttons with an accent background) or "muted"."""
