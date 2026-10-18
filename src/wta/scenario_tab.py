@@ -32,11 +32,12 @@ from PySide6.QtWidgets import (
 )
 
 from wta import cost
-from wta.db import Database, store
+from wta.db import Database, library, store
 from wta.db import runs as run_store
 from wta.db import scenarios as sc
 from wta.db import site_notes
 from wta.db.models import MAX_SCENARIOS_PER_BATCH, ReviewDecision, Scenario, ScenarioKind, Step, StepStatus
+from wta.library_dialog import LibraryDialog
 from wta.review_widgets import BugCard, ScreenshotCard, StatusFilterBar
 from wta.scenario_dialogs import ScenarioDialog, SmokePageDialog, StepDialog
 from wta.step_table import (
@@ -92,9 +93,15 @@ class ScenarioTab(QWidget):
         self.add_scenario_button = QPushButton(f"Add {self.item_name}…")
         self.edit_scenario_button = QPushButton("Edit…")
         self.remove_scenario_button = QPushButton("Remove")
+        self.from_library_button = QPushButton("Add from library…")
+        self.from_library_button.setToolTip(f"Add saved {self.item_name}s, or import test cases from Excel or CSV")
+        self.save_library_button = QPushButton("Save to library")
+        self.save_library_button.setToolTip(f"Keep this {self.item_name} in the library to run it again later, "
+                                            "for example on the next build")
         self.scenario_count = QLabel()
         scenario_buttons = QHBoxLayout()
-        for w in (self.add_scenario_button, self.edit_scenario_button, self.remove_scenario_button):
+        for w in (self.add_scenario_button, self.edit_scenario_button, self.remove_scenario_button,
+                  self.from_library_button, self.save_library_button):
             scenario_buttons.addWidget(w)
         scenario_buttons.addStretch(1)
         scenario_buttons.addWidget(self.scenario_count)
@@ -206,6 +213,8 @@ class ScenarioTab(QWidget):
         self.add_scenario_button.clicked.connect(self.add_scenario)
         self.edit_scenario_button.clicked.connect(self.edit_scenario)
         self.remove_scenario_button.clicked.connect(self.remove_scenario)
+        self.from_library_button.clicked.connect(self.add_from_library)
+        self.save_library_button.clicked.connect(self.save_to_library)
         self.step_table.selectionModel().currentRowChanged.connect(lambda *_: self._show_step())
         self.step_table.doubleClicked.connect(lambda _index: self.edit_step())
         self.add_step_button.clicked.connect(self.add_step)
@@ -235,6 +244,7 @@ class ScenarioTab(QWidget):
         if running:
             self.add_scenario_button.setEnabled(False)
             self.remove_scenario_button.setEnabled(False)
+            self.from_library_button.setEnabled(False)
         else:
             self._load_scenarios()  # recomputes the scenario buttons (e.g. batch full)
 
@@ -332,6 +342,8 @@ class ScenarioTab(QWidget):
         self.add_scenario_button.setEnabled(len(scenarios) < MAX_SCENARIOS_PER_BATCH)
         self.edit_scenario_button.setEnabled(bool(scenarios))
         self.remove_scenario_button.setEnabled(bool(scenarios))
+        self.from_library_button.setEnabled(len(scenarios) < MAX_SCENARIOS_PER_BATCH)
+        self.save_library_button.setEnabled(bool(scenarios))
         self._update_estimate()
         self._load_steps()
 
@@ -391,6 +403,34 @@ class ScenarioTab(QWidget):
             sc.update_scenario(self.db, scenario.id, dialog.data())
             sc.set_account(self.db, scenario.id, dialog.account_id())
             self._load_scenarios(select_id=scenario.id)
+
+    def add_from_library(self) -> None:
+        if self.session_id is None:
+            return
+        room = MAX_SCENARIOS_PER_BATCH - self.scenario_list.count()
+        dialog = LibraryDialog(self.db, self.kind, room, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.chosen_ids():
+            return
+        try:
+            added = library.add_to_batch(self.db, self.session_id, self.batch, dialog.chosen_ids(), self.kind)
+        except (sc.BatchFullError, ValueError) as exc:
+            QMessageBox.warning(self, "Add from library", str(exc))
+            return
+        self._load_scenarios(select_id=added[-1].id if added else None)
+        self.status_message.emit(f"Added {len(added)} {self.item_name}(s) from the library.")
+
+    def save_to_library(self) -> None:
+        scenario = self._current_scenario()
+        if scenario is None:
+            return
+        try:
+            _item, created = library.save_scenario(self.db, scenario.id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Save to library", str(exc))
+            return
+        self._load_scenarios(select_id=scenario.id)
+        self.status_message.emit(f"“{scenario.name}” " + ("saved to the library." if created
+                                                           else "updated in the library."))
 
     def remove_scenario(self) -> None:
         scenario = self._current_scenario()
