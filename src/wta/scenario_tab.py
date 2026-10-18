@@ -365,6 +365,17 @@ class ScenarioTab(QWidget):
             "Other Claude Code use on your plan at the same time also counts, so treat it as a rough guide."
         )
 
+    def show_scenario(self, scenario_id: int, step_id: int | None = None) -> None:
+        """Select a scenario (switching to its batch) and one of its steps, e.g. from a search result."""
+        batch = sc.scenario_batch(self.db, scenario_id)
+        if batch is None:
+            return
+        batches = sc.batch_numbers(self.db, self.session_id, self.kind)
+        self._fill_batches(batches, batch)
+        self._load_scenarios(select_id=scenario_id)
+        self.filter_bar.buttons["all"].click()
+        self._load_steps(select_id=step_id)
+
     def _accounts(self) -> list[tuple[int | None, str]]:
         return store.account_choices_for(self.db, self.session_id) if self.session_id is not None else []
 

@@ -191,6 +191,18 @@ def add_scenario(
     return scenario
 
 
+def scenario_batch(db: Database, scenario_id: int) -> int | None:
+    with db.Session() as orm:
+        scenario = orm.get(Scenario, scenario_id)
+        return scenario.batch_number if scenario else None
+
+
+def scenario_kind(db: Database, scenario_id: int) -> ScenarioKind | None:
+    with db.Session() as orm:
+        scenario = orm.get(Scenario, scenario_id)
+        return scenario.kind if scenario else None
+
+
 def set_account(db: Database, scenario_id: int, account_id: int | None) -> None:
     """Which of the session's accounts a scenario (or smoke page) runs as; None = the main account."""
     with db.Session.begin() as orm:
