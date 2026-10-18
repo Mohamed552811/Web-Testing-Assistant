@@ -96,6 +96,13 @@
 
   document.getElementById("save").addEventListener("click", () => {
     const newName = document.getElementById("display-name").value;
+    if (new URLSearchParams(location.search).has("fixed")) {
+      // app.html?fixed stands for a build where the bug below is fixed (for regression checks).
+      state.displayName = newName;
+      document.getElementById("profile-msg").textContent = "Profile saved. Display name: " + newName;
+      document.getElementById("welcome").textContent = "Welcome, " + newName;
+      return;
+    }
     // Deliberate bug: the new name is never stored, and the confirmation shows the old one.
     console.error("TypeError: Cannot read properties of undefined (reading 'displayName') at saveProfile");
     document.getElementById("profile-msg").textContent = "Profile saved. Display name: " + state.displayName;
