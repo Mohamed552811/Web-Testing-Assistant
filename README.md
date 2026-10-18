@@ -59,7 +59,8 @@ This installs PySide6, SQLAlchemy, openpyxl and python-docx. The first test run 
    - Excel's Bugs sheet uses Azure DevOps / TFS field names, so it can be imported.
    - Markdown writes a folder with `SUMMARY.md` (test information, scope, results per test case, overall result, bugs found, attachments), one `BUG-NNN-<title>.md` per bug, and the screenshots. Key Findings, Recommendations, Impact and Notes are left empty for you to fill in.
    - Application and Test scope come from the session form; Tester comes from Settings.
-7. **Session → Settings** (Ctrl+,): tester name, screenshot timing, default export format, "pause before risky actions" (off by default), the plan usage limit at which a batch pauses (80% of the 5-hour window by default), and the model for scenarios (Claude Code's default) and for smoke tests (Sonnet).
+7. **Tools menu**: **Search everything** (Ctrl+Shift+F) across all sessions — scenarios, steps, bugs, site notes and the library; double-click a result to open it. **Trends** shows the pass rate by day and the open bugs per session for a site. **Clean up and back up** shows how much disk the runs folder uses, removes run folders older than N days (each scenario's latest run is kept), and backs up or restores the database. Backups stay in the data folder on this machine, because they include the test accounts; a restore takes effect at the next start.
+8. **Session → Settings** (Ctrl+,): tester name, screenshot timing, default export format, "pause before risky actions" (off by default), the plan usage limit at which a batch pauses (80% of the 5-hour window by default), and the model for scenarios (Claude Code's default) and for smoke tests (Sonnet).
    Next to **Run batch** the app shows an estimate of the plan usage, from your recent runs. Before each scenario after the first, a batch pauses and asks you once usage reaches the limit.
 
 The bar at the top shows Claude Code sign-in and your 5-hour and weekly plan usage. Usage is updated during test runs from data Claude Code reports.
@@ -70,6 +71,7 @@ The bar at the top shows Claude Code sign-in and your 5-hour and weekly plan usa
 - During a run the embedded browser refuses to open pages outside the session's allowed domains.
 - Uploads are possible only from the session's upload folder: its files are copied into the run folder, and Claude can upload nothing else.
 - Pages the site opens in a new tab appear in their own window; Claude may switch to them and close them. When a page prints, the app saves the printout as a PDF in the run folder.
+- For Bug and Blocked steps Claude names the element that is wrong; the app takes its own screenshot with a box around it (`step-N-highlight.png`, shown first in the review), keeping Claude's screenshot as it is.
 - Page content is treated as data. Instructions found on a page are ignored and reported as notices.
 - **Close all browsers** stops any run and closes every process the app started, tracked by process ID. It never touches your own browsers. It also runs when the app closes.
 - The test account stays in the local database. The password is redacted from run files and exported reports; the account email may appear in exported reports.
