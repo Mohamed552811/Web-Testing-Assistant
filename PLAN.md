@@ -97,3 +97,11 @@ From Phase 12 (2026-10-18):
 - The logo is original artwork. tools/build_icons.py renders it to PNGs and a multi-size app.ico (16 to 256 px, PNG entries, built with the standard library); the 16 px size uses a simplified bug-only SVG. The taskbar shows the logo because the process sets its own AppUserModelID.
 - The theme follows Windows by default (Qt 6.12 QStyleHints.colorScheme) and switches live; light #9B2D20, dark #C8553D. Fail and Bug status colours stay a separate red.
 - Layout is remembered in ui-state.ini in the data folder (window geometry, panel split, last tab).
+
+From Phase 13 (2026-10-18):
+- Editing a bug saves your version in the bug's own fields, so exports use it. The first save also keeps Claude's version (as JSON in `bug.claude_original`); later saves never overwrite it. "Use Claude's version" puts it back in the fields, and it is saved when you press Save bug.
+- The summary filter counts each step by the status that counts: your final status, or Claude's while unreviewed. "To review" counts steps with no final status, re-run requests included.
+- Keys A / O / R work while the step table or a button has focus. They never fire while you type in the comment or bug fields, or with Ctrl/Alt/Shift held. The table would otherwise use letters for type-ahead search, so an event filter takes them first.
+- The last open session is reopened by `main()` after the window is shown, not when the window is built, so tests start on the welcome screen. If the session was deleted, the welcome screen stays.
+- Screenshot paths are stored as absolute paths; if the file is gone, the screenshot card is hidden.
+- Checked on a copy of the Phase 8 smoke data (15 checks: 10 Pass, 4 Bug, 1 Blocked, 1 to review) in light and dark themes.
