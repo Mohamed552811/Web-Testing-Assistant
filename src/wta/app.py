@@ -117,6 +117,8 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.run_panel, "Live run")
         self.runs_tab = RunsTab(db, self)
         self.tabs.addTab(self.runs_tab, "Runs")
+        for tab in self.review_tabs:
+            tab.site_note_saved.connect(self.runs_tab.notes_panel.refresh)
 
         # Left side: the welcome screen until a session is open, then the browser.
         self.welcome = WelcomePage(self)
@@ -233,7 +235,8 @@ class MainWindow(QMainWindow):
                                        (tab.remove_scenario_button, "trash-2", None), (tab.add_step_button, "plus", None),
                                        (tab.edit_step_button, "pencil", None), (tab.delete_step_button, "trash-2", None),
                                        (tab.approve_button, "check", None), (tab.override_button, "pencil", None),
-                                       (tab.rerun_button, "rotate-ccw", None)):
+                                       (tab.rerun_button, "rotate-ccw", None),
+                                       (tab.site_note_button, "file-plus", None)):
                 icons.set_icon(button, name, role)
         icons.set_icon(self.run_panel.stop_button, "square", "on-accent")
         icons.set_icon(self.runs_tab.open_folder_button, "folder")
@@ -277,7 +280,23 @@ class MainWindow(QMainWindow):
         state.setValue("geometry", self.saveGeometry())
         state.setValue("splitter", self.splitter.saveState())
         state.setValue("tab", self.tabs.currentIndex())
+        if self.current_session is not None:
+            state.setValue("last_session_id", self.current_session.id)
         state.sync()
+
+    def reopen_last_session(self) -> bool:
+        """Open the session that was open when the app last closed, if it still exists."""
+        last = self._ui_state().value("last_session_id")
+        if last is None:
+            return False
+        try:
+            session = store.load_session(self.db, int(last))
+        except (LookupError, ValueError):
+            return False
+        tab = self.tabs.currentIndex()
+        self.show_session(session)
+        self.tabs.setCurrentIndex(tab)
+        return True
 
     def edit_settings(self) -> None:
         dialog = SettingsDialog(self.settings, self)
@@ -396,9 +415,10 @@ class MainWindow(QMainWindow):
     def show_session(self, session: TestSession) -> None:
         self.current_session = session
         self._update_title()
+        site = site_notes.site_for_url(session.target_url)
         for tab in self.review_tabs:
-            tab.set_session(session.id)
-        self.runs_tab.set_session(session.id, site_notes.site_for_url(session.target_url))
+            tab.set_session(session.id, site)
+        self.runs_tab.set_session(session.id, site)
         self.left.setCurrentWidget(self.browser)
         self.browser.set_viewport(session.viewport_width, session.viewport_height)
         self.browser.view.load(QUrl(session.target_url))
@@ -606,6 +626,7 @@ def main(argv: list[str] | None = None) -> int:
     profile.setUrlRequestInterceptor(guard)
     window = MainWindow(db, profile, cdp_port, guard=guard)
     window.show()
+    window.reopen_last_session()
     try:
         return app.exec()
     finally:

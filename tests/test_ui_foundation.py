@@ -140,6 +140,31 @@ class MainWindowUiTests(unittest.TestCase):
         self.assertTrue((self.base / "ui-state.ini").is_file())
         again.deleteLater()
 
+    def test_last_session_is_reopened(self):
+        w = self.window()
+        self.assertFalse(w.reopen_last_session())  # nothing remembered yet
+        session = store.create_session(self.db, store.SessionDetails(name="Shop", target_url="https://shop.example.com"))
+        w.open_session_by_id(session.id)
+        w.tabs.setCurrentIndex(3)
+        w._save_ui_state()
+        w.deleteLater()
+        again = self.window()
+        self.assertIsNone(again.current_session)  # only main() reopens it, after the window is shown
+        self.assertTrue(again.reopen_last_session())
+        self.assertEqual(again.current_session.id, session.id)
+        self.assertEqual(again.tabs.currentIndex(), 3)  # the remembered tab stays
+        self.assertEqual(again.scenario_tab.site, "shop.example.com")
+        again.deleteLater()
+
+    def test_deleted_last_session_is_skipped(self):
+        w = self.window()
+        state = w._ui_state()
+        state.setValue("last_session_id", 999)
+        state.sync()
+        self.assertFalse(w.reopen_last_session())
+        self.assertIs(w.left.currentWidget(), w.welcome)
+        w.deleteLater()
+
     def test_about_box(self):
         about = AboutDialog()
         self.assertIn("Web Testing Assistant", about.windowTitle())
