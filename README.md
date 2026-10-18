@@ -56,7 +56,8 @@ This installs PySide6, SQLAlchemy, openpyxl and python-docx. The first test run 
    - Excel's Bugs sheet uses Azure DevOps / TFS field names, so it can be imported.
    - Markdown writes a folder with `SUMMARY.md` (test information, scope, results per test case, overall result, bugs found, attachments), one `BUG-NNN-<title>.md` per bug, and the screenshots. Key Findings, Recommendations, Impact and Notes are left empty for you to fill in.
    - Application and Test scope come from the session form; Tester comes from Settings.
-7. **Session → Settings** (Ctrl+,): tester name, screenshot timing, default export format, and "pause before risky actions" (off by default).
+7. **Session → Settings** (Ctrl+,): tester name, screenshot timing, default export format, "pause before risky actions" (off by default), the plan usage limit at which a batch pauses (80% of the 5-hour window by default), and the model for scenarios (Claude Code's default) and for smoke tests (Sonnet).
+   Next to **Run batch** the app shows an estimate of the plan usage, from your recent runs. Before each scenario after the first, a batch pauses and asks you once usage reaches the limit.
 
 The bar at the top shows Claude Code sign-in and your 5-hour and weekly plan usage. Usage is updated during test runs from data Claude Code reports.
 
