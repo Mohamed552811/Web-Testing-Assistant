@@ -20,7 +20,10 @@ from wta.runner import BatchRun, run_folder  # noqa: E402
 from wta.scenario_tab import ScenarioTab  # noqa: E402
 from wta.step_table import COL_CLAUDE_STATUS, COL_FINAL_STATUS  # noqa: E402
 
-app = QApplication.instance() or QApplication([])
+try:  # the shared app, closed down cleanly at exit (see qt_app.py)
+    from qt_app import app  # noqa: E402
+except ImportError:  # run as tests.<module>
+    from tests.qt_app import app  # noqa: E402
 PAGE = sc.SmokePageInput("Login page", "practice.example.com/login", "Open the URL", False, "A login form", "Username, Password")
 
 

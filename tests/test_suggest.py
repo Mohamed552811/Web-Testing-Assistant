@@ -19,7 +19,10 @@ from wta.db import Database, library, store  # noqa: E402
 from wta.scenario_tab import ScenarioTab  # noqa: E402
 from wta.suggest_dialog import SuggestDialog  # noqa: E402
 
-app = QApplication.instance() or QApplication([])
+try:  # the shared app, closed down cleanly at exit (see qt_app.py)
+    from qt_app import app  # noqa: E402
+except ImportError:  # run as tests.<module>
+    from tests.qt_app import app  # noqa: E402
 FAKE = [sys.executable, str(Path(__file__).with_name("fake_claude.py"))]
 
 

@@ -26,7 +26,10 @@ from wta.prompt import ACCESSIBILITY_CHECKS, RunContext, SmokeContext, build_pro
 from wta.runs_tab import RunsTab, findings_html  # noqa: E402
 from wta.scenario_tab import ScenarioTab  # noqa: E402
 
-app = QApplication.instance() or QApplication([])
+try:  # the shared app, closed down cleanly at exit (see qt_app.py)
+    from qt_app import app  # noqa: E402
+except ImportError:  # run as tests.<module>
+    from tests.qt_app import app  # noqa: E402
 TARGET = "TARGET1"
 
 

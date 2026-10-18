@@ -13,7 +13,10 @@ from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 from wta import test_data  # noqa: E402
 from wta.scenario_dialogs import ScenarioDialog  # noqa: E402
 
-app = QApplication.instance() or QApplication([])
+try:  # the shared app, closed down cleanly at exit (see qt_app.py)
+    from qt_app import app  # noqa: E402
+except ImportError:  # run as tests.<module>
+    from tests.qt_app import app  # noqa: E402
 
 
 class FillerTests(unittest.TestCase):

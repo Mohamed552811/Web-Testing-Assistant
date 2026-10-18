@@ -26,7 +26,10 @@ from wta.runner import RunOutcome, ScenarioJob, run_progress  # noqa: E402
 from wta.stream import RunSummary, TraceEvent  # noqa: E402
 from wta.usage_bar import TopBar  # noqa: E402
 
-app = QApplication.instance() or QApplication([])
+try:  # the shared app, closed down cleanly at exit (see qt_app.py)
+    from qt_app import app  # noqa: E402
+except ImportError:  # run as tests.<module>
+    from tests.qt_app import app  # noqa: E402
 
 
 def context(steps="", expected="", smoke=None):

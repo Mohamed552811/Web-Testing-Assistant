@@ -27,7 +27,10 @@ from wta.results import HIGHLIGHT_SUFFIX, read_results, apply_results  # noqa: E
 from wta.review_widgets import ScreenshotCard  # noqa: E402
 from wta.runner import ScenarioJob, ScenarioRun  # noqa: E402
 
-app = QApplication.instance() or QApplication([])
+try:  # the shared app, closed down cleanly at exit (see qt_app.py)
+    from qt_app import app  # noqa: E402
+except ImportError:  # run as tests.<module>
+    from tests.qt_app import app  # noqa: E402
 PAGE = """<html><body style="margin:0;font:16px sans-serif">
 <h1 style="margin:20px">Profile</h1>
 <input aria-label="Display name" value="Sam Tester" style="margin:20px;width:300px">

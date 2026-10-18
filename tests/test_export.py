@@ -21,7 +21,10 @@ from wta.prompt import RunContext, SmokeContext, build_prompt  # noqa: E402
 from wta.results import StepResult, screenshot_rule  # noqa: E402
 from wta.settings_dialog import SettingsDialog  # noqa: E402
 
-app = QApplication.instance() or QApplication([])
+try:  # the shared app, closed down cleanly at exit (see qt_app.py)
+    from qt_app import app  # noqa: E402
+except ImportError:  # run as tests.<module>
+    from tests.qt_app import app  # noqa: E402
 PASSWORD = "Secret-Pw-123"
 
 

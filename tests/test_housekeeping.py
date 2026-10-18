@@ -25,7 +25,10 @@ from wta.housekeeping_dialog import HousekeepingDialog  # noqa: E402
 from wta.search_dialog import SearchDialog  # noqa: E402
 from wta.trends_dialog import TrendsDialog  # noqa: E402
 
-app = QApplication.instance() or QApplication([])
+try:  # the shared app, closed down cleanly at exit (see qt_app.py)
+    from qt_app import app  # noqa: E402
+except ImportError:  # run as tests.<module>
+    from tests.qt_app import app  # noqa: E402
 
 
 class Fixture(unittest.TestCase):

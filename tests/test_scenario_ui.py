@@ -17,7 +17,10 @@ from wta.db.models import StepStatus  # noqa: E402
 from wta.scenario_tab import ScenarioTab  # noqa: E402
 from wta.step_table import COL_CLAUDE_STATUS, COL_FINAL_STATUS, COLUMNS, PENDING, RERUN, StepTableModel  # noqa: E402
 
-app = QApplication.instance() or QApplication([])
+try:  # the shared app, closed down cleanly at exit (see qt_app.py)
+    from qt_app import app  # noqa: E402
+except ImportError:  # run as tests.<module>
+    from tests.qt_app import app  # noqa: E402
 
 
 class Fixture(unittest.TestCase):
