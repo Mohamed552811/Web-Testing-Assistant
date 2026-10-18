@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl, Signal
-from PySide6.QtGui import QBrush, QDesktopServices
+from PySide6.QtGui import QBrush, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from wta.db import Database
 from wta.db import runs as run_store
+from wta import claude_launcher
 from wta.db import site_notes
 from wta.db.models import Run, RunOutcomeKind, ScenarioKind, TraceKind
 from wta.run_panel import KIND_STYLE
@@ -143,6 +144,14 @@ class RunsTab(QWidget):
         self.summary.setWordWrap(True)
         self.summary.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.open_folder_button = QPushButton("Open run folder")
+        self.copy_resume_button = QPushButton("Copy resume command")
+        self.copy_resume_button.setToolTip(
+            "Copies a terminal command that reopens this run's Claude Code session, so you can ask Claude about it. "
+            "Claude gets no tools there; the test password has been removed from the saved session."
+        )
+        self.session_label = QLabel()
+        self.session_label.setStyleSheet("color: gray;")
+        self.session_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.steps_table = QTableWidget(0, 4)
         self.steps_table.setHorizontalHeaderLabels(["#", "Status", "Action", "Actual"])
         self.steps_table.verticalHeader().hide()
@@ -183,8 +192,13 @@ class RunsTab(QWidget):
         detail_layout = QVBoxLayout(detail_box)
         head = QHBoxLayout()
         head.addWidget(self.summary, 1)
-        head.addWidget(self.open_folder_button, 0, Qt.AlignmentFlag.AlignTop)
+        run_buttons = QVBoxLayout()
+        run_buttons.addWidget(self.open_folder_button)
+        run_buttons.addWidget(self.copy_resume_button)
+        run_buttons.addStretch(1)
+        head.addLayout(run_buttons)
         detail_layout.addLayout(head)
+        detail_layout.addWidget(self.session_label)
         detail_layout.addWidget(inner, 1)
 
         self.notes_panel = SiteNotesPanel(db)
@@ -202,6 +216,7 @@ class RunsTab(QWidget):
         self.kind_filter.currentIndexChanged.connect(lambda _i: self._load_trace())
         self.search.textChanged.connect(lambda _t: self._load_trace())
         self.open_folder_button.clicked.connect(self._open_folder)
+        self.copy_resume_button.clicked.connect(self.copy_resume_command)
         self._runs: list[Run] = []
         self.set_session(None, "")
 
@@ -242,6 +257,8 @@ class RunsTab(QWidget):
     def _show_run(self) -> None:
         run = self._current_run()
         self.open_folder_button.setEnabled(run is not None)
+        self.copy_resume_button.setEnabled(run is not None and bool(run.claude_session_id))
+        self.session_label.setText(self._session_text(run))
         self.steps_table.setRowCount(0)
         if run is None:
             self.summary.setText("No runs yet in this session." if self.session_id else "Open a session first.")
@@ -290,6 +307,21 @@ class RunsTab(QWidget):
             item.setForeground(QBrush(color))
             item.setToolTip(trace.text[:4000])
             self.trace.addItem(item)
+
+    @staticmethod
+    def _session_text(run: Run | None) -> str:
+        if run is None or not run.claude_session_id:
+            return "" if run is None else "Claude session: not recorded"
+        cleaned = "test password removed" if run.transcript_cleaned_at else "test password not removed yet"
+        return f"Claude session: {run.claude_session_id} ({cleaned})"
+
+    def copy_resume_command(self) -> None:
+        run = self._current_run()
+        if run is None or not run.claude_session_id:
+            return
+        command = claude_launcher.resume_command(Path(run.run_dir), run.claude_session_id)
+        QGuiApplication.clipboard().setText(command)
+        self.session_label.setText(self._session_text(run) + " — resume command copied")
 
     def _open_folder(self) -> None:
         run = self._current_run()

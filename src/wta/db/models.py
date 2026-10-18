@@ -273,6 +273,9 @@ class Run(Base):
     seven_day_seen: Mapped[float | None] = mapped_column()
     summary: Mapped[str] = mapped_column(Text, default="")
     site_notes_used: Mapped[int] = mapped_column(Integer, default=0)
+    # Claude Code's own session for this run, and when the test password was removed from it.
+    claude_session_id: Mapped[str | None] = mapped_column(String(64))
+    transcript_cleaned_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     scenario: Mapped[Scenario] = relationship(back_populates="runs")
     traces: Mapped[list["RunTrace"]] = relationship(

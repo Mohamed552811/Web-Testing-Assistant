@@ -104,6 +104,16 @@ def check_sign_in(timeout: float = 60) -> SignInStatus:
     return parse_auth_status(done.returncode, done.stdout)
 
 
+def resume_command(run_dir: Path, session_id: str) -> str:
+    """A command you can paste in a terminal to reopen a run's Claude session and ask about it.
+
+    It starts in the run's folder (Claude Code keeps sessions per folder) and gives Claude no
+    tools and none of your own settings, so it can only answer questions about the run."""
+    command = (find_claude() or [CLAUDE_EXECUTABLE])[-1:]
+    return format_for_shell(command + ["--resume", session_id, "--restricted", "--strict-mcp-config", "--tools="],
+                            cwd=run_dir)
+
+
 def run_args(mcp_config: Path, resume_session: str | None = None) -> list[str]:
     """Arguments (after the executable) for a test run. The prompt is written to stdin,
     so the test account never appears on a command line. `resume_session` continues an

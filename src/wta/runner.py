@@ -15,7 +15,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QIODevice, QObject, QProcess, QProcessEnvironment, QTimer, Signal
 
-from wta import claude_launcher, processes, usage
+from wta import claude_launcher, processes, session_files, usage
 from wta.db.database import Database
 from wta.db import runs
 from wta.db.models import RunOutcomeKind, TraceKind
@@ -338,7 +338,22 @@ class ScenarioRun(QObject):
         if not (self.job.run_dir / RESULTS_FILE).exists():
             self.outcome.problems.append("Claude did not write results.json")
         self._record_run_end()
+        self._clean_saved_session()
         self.finished.emit(self.outcome)
+
+    def _clean_saved_session(self) -> None:
+        """Remove the test password from Claude Code's saved session of this run.
+
+        Only done once the run is completely over: a --resume continuation still needs it."""
+        if self.run_id is None:
+            return
+        result = session_files.clean_run(
+            self.job.run_dir, self.session_id, [self.job.context.test_account_password]
+        )
+        if result.errors:
+            self.outcome.problems += [f"Could not clean Claude's saved session: {e}" for e in result.errors]
+            return  # left for the clean-up on the next start
+        runs.mark_transcript_cleaned(self.db, self.run_id)
 
     def _record_run_end(self) -> None:
         if self.run_id is None:
@@ -363,6 +378,7 @@ class ScenarioRun(QObject):
             five_hour_seen=seen["five_hour"].percent if "five_hour" in seen else None,
             seven_day_seen=seen["seven_day"].percent if "seven_day" in seen else None,
             summary=self.redact(s.text) if s else "",
+            claude_session_id=self.session_id,
         ))
 
 

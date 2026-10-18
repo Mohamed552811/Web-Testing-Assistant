@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from wta.db.database import Database
 from wta.db.models import Run, RunOutcomeKind, RunTrace, Scenario, TraceKind, utcnow
+from wta.session_files import clean_run, find_session_id
 
 
 def start_run(
@@ -42,6 +43,7 @@ class RunEnd:
     five_hour_seen: float | None = None
     seven_day_seen: float | None = None
     summary: str = ""
+    claude_session_id: str | None = None
 
 
 def finish_run(db: Database, run_id: int, end: RunEnd) -> None:
@@ -81,6 +83,51 @@ def run_traces(db: Database, run_id: int, kind: TraceKind | None = None, search:
         if search:
             query = query.where(RunTrace.text.icontains(search))
         return list(orm.scalars(query.order_by(RunTrace.timestamp, RunTrace.id)))
+
+
+def mark_transcript_cleaned(db: Database, run_id: int) -> None:
+    with db.Session.begin() as orm:
+        run = orm.get(Run, run_id)
+        if run is not None:
+            run.transcript_cleaned_at = utcnow()
+
+
+def clean_saved_sessions(db: Database, projects: Path | None = None) -> tuple[int, int, list[str]]:
+    """Remove the test password from Claude Code's saved sessions of every finished run not cleaned yet.
+
+    Used once on startup after the update (and afterwards for runs cut off by a crash).
+    Returns (runs cleaned, passwords replaced, problems).
+    """
+    cleaned = replaced = 0
+    problems: list[str] = []
+    with db.Session() as orm:
+        pending = [
+            (run.id, run.run_dir, run.claude_session_id, run.scenario.session.test_account_password)
+            for run in orm.scalars(
+                select(Run)
+                .where(Run.transcript_cleaned_at.is_(None), Run.outcome != RunOutcomeKind.RUNNING)
+                .options(selectinload(Run.scenario).selectinload(Scenario.session))
+            )
+        ]
+    for run_id, run_dir, session_id, password in pending:
+        result = clean_run(run_dir, session_id, [password] if password else [], projects)
+        problems += result.errors
+        if not result.errors:
+            mark_transcript_cleaned(db, run_id)
+            cleaned += 1
+            replaced += result.replaced
+            if session_id is None:  # runs from before the ID was stored: link them to their session
+                found = find_session_id(run_dir, projects)
+                if found:
+                    set_claude_session_id(db, run_id, found)
+    return cleaned, replaced, problems
+
+
+def set_claude_session_id(db: Database, run_id: int, session_id: str) -> None:
+    with db.Session.begin() as orm:
+        run = orm.get(Run, run_id)
+        if run is not None:
+            run.claude_session_id = session_id
 
 
 def mark_interrupted_runs(db: Database) -> int:

@@ -462,6 +462,9 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationName(APP_TITLE)
     db = Database(database_path())
     run_store.mark_interrupted_runs(db)  # runs cut off by a crash or kill last time
+    # Remove the test password from Claude Code's saved sessions of earlier runs (one-time after
+    # the update, afterwards only for runs that could not be cleaned when they ended).
+    run_store.clean_saved_sessions(db)
     profile = make_profile(data_dir() / "browser-profile", app)
     guard = NavigationGuard(app)
     profile.setUrlRequestInterceptor(guard)
