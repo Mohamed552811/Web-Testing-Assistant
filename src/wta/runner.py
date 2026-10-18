@@ -352,8 +352,9 @@ class ScenarioRun(QObject):
         )
         if result.errors:
             self.outcome.problems += [f"Could not clean Claude's saved session: {e}" for e in result.errors]
-            return  # left for the clean-up on the next start
-        runs.mark_transcript_cleaned(self.db, self.run_id)
+        if result.done(self.session_id):
+            runs.mark_transcript_cleaned(self.db, self.run_id)
+        # otherwise it is left for the clean-up on the next start
 
     def _record_run_end(self) -> None:
         if self.run_id is None:

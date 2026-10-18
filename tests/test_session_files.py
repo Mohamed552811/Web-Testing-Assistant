@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -35,6 +36,8 @@ class SessionFileTests(unittest.TestCase):
         self.folder = self.projects / session_files.project_folder_name(self.run_dir)
 
     def tearDown(self):
+        # Through the long-path form: ordinary removal fails on paths over 260 characters.
+        shutil.rmtree(session_files._fs(Path(self.tmp.name)), ignore_errors=True)
         self.tmp.cleanup()
 
     def test_folder_name_matches_claude_code(self):
@@ -72,7 +75,9 @@ class SessionFileTests(unittest.TestCase):
         self.assertNotIn(PASSWORD, text)
         self.assertNotIn(json.dumps(PASSWORD)[1:-1], text)
         self.assertEqual(text.count(session_files.PLACEHOLDER), 2)
-        self.assertEqual(json.loads(text.splitlines()[0])["content"], "Password: [test password]")  # still valid JSON
+        self.assertEqual(json.loads(text.splitlines()[0])["content"],  # still valid JSON
+                         f"Password: {session_files.PLACEHOLDER}")
+        self.assertIn("removed after the run", session_files.PLACEHOLDER)  # a resumed Claude can tell what happened
         self.assertEqual([p.name for p in self.folder.iterdir()], ["s.jsonl"])  # no temp file left
 
     def test_redact_leaves_clean_files_untouched(self):
@@ -91,6 +96,27 @@ class SessionFileTests(unittest.TestCase):
             result = session_files.clean_run(self.run_dir, "s", [PASSWORD], self.projects)
         self.assertEqual((result.files, result.replaced), (1, 0))
         self.assertTrue(result.errors)
+
+    def test_paths_longer_than_260_characters(self):
+        """Session folders are named after the whole run path, so real paths pass Windows' 260-character limit."""
+        long_run = Path("C:/") / ("x" * 90) / ("y" * 90) / "scenario-1-20261018-154853"
+        folder = self.projects / session_files.project_folder_name(long_run)
+        f = folder / "8d54436f-6215-44a5-b567-cd653348b908.jsonl"
+        self.assertGreater(len(str(f)), 260)  # the whole path is too long for ordinary Windows file calls…
+        self.assertLess(len(folder.name), 255)  # …while each name stays within Windows' per-name limit
+        session_files._fs(folder).mkdir(parents=True)
+        session_files._fs(f).write_text(json.dumps({"content": PASSWORD}), encoding="utf-8")
+        found = session_files.session_files(long_run, f.stem, self.projects)
+        self.assertEqual([p.name for p in found], [f.name])
+        result = session_files.clean_run(long_run, f.stem, [PASSWORD], self.projects)
+        self.assertEqual((result.files, result.replaced, result.errors), (1, 1, []))
+        self.assertNotIn(json.dumps(PASSWORD)[1:-1], session_files._fs(f).read_text("utf-8"))
+        self.assertEqual(session_files.find_session_id(long_run, self.projects), f.stem)
+
+    def test_not_trusted_as_clean_when_the_session_was_not_found(self):
+        missing = session_files.clean_run(self.run_dir, "sid-404", [PASSWORD], self.projects)
+        self.assertFalse(missing.done("sid-404"))  # Claude reported a session but no file was found: retry later
+        self.assertTrue(missing.done(None))  # no session reported (e.g. Claude never started): nothing to clean
 
     def test_find_session_id(self):
         self.assertIsNone(session_files.find_session_id(self.run_dir, self.projects))

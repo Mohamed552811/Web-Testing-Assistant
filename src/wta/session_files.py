@@ -15,7 +15,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-PLACEHOLDER = "[test password]"
+# Says what happened, so Claude reading a resumed session does not mistake it for the password it typed.
+PLACEHOLDER = "[test password, removed after the run]"
 
 
 def claude_projects_dir() -> Path:
@@ -28,6 +29,24 @@ def project_folder_name(run_dir: Path | str) -> str:
     return re.sub(r"[^A-Za-z0-9]", "-", str(run_dir))
 
 
+def _fs(path: Path) -> Path:
+    """The path in Windows' long-path form (\\\\?\\C:\\...). Session folders are named after the whole
+    run folder path, so the full file path easily passes 260 characters, and then ordinary file
+    calls report the file as missing."""
+    if os.name != "nt":
+        return path
+    text = str(path)
+    if text.startswith("\\\\?\\"):
+        return path
+    return Path("\\\\?\\" + os.path.abspath(text))
+
+
+def _plain(path: Path) -> Path:
+    """The path without the long-path prefix, for messages and results."""
+    text = str(path)
+    return Path(text[4:]) if text.startswith("\\\\?\\") else path
+
+
 def session_files(run_dir: Path | str, session_id: str | None = None, projects: Path | None = None) -> list[Path]:
     """All saved-session files belonging to a run.
 
@@ -35,18 +54,18 @@ def session_files(run_dir: Path | str, session_id: str | None = None, projects: 
     session ID is looked for, so another project's files are never picked up by accident.
     """
     projects = projects or claude_projects_dir()
-    folder = projects / project_folder_name(run_dir)
+    folder = _fs(projects / project_folder_name(run_dir))
     if folder.is_dir():
-        return sorted(f for f in folder.rglob("*") if f.is_file())
-    if session_id and projects.is_dir():
-        return sorted(projects.glob(f"*/{session_id}.jsonl"))
+        return sorted(_plain(f) for f in folder.rglob("*") if f.is_file())
+    if session_id and _fs(projects).is_dir():
+        return sorted(_plain(f) for f in _fs(projects).glob(f"*/{session_id}.jsonl"))
     return []
 
 
 def find_session_id(run_dir: Path | str, projects: Path | None = None) -> str | None:
     """The session ID of a run whose ID was not recorded (runs from before it was stored):
     the newest session file in the run's own project folder is named after it."""
-    folder = (projects or claude_projects_dir()) / project_folder_name(run_dir)
+    folder = _fs((projects or claude_projects_dir()) / project_folder_name(run_dir))
     files = sorted(folder.glob("*.jsonl"), key=lambda f: f.stat().st_mtime) if folder.is_dir() else []
     return files[-1].stem if files else None
 
@@ -64,6 +83,7 @@ def redact_file(path: Path, secrets: list[str], placeholder: str = PLACEHOLDER) 
     secrets = [s for s in secrets if s]
     if not secrets:
         return 0
+    path = _fs(path)
     data = path.read_bytes()
     count = 0
     for secret in secrets:
@@ -89,6 +109,11 @@ class CleanResult:
     @property
     def found(self) -> bool:
         return self.files > 0
+
+    def done(self, session_id: str | None) -> bool:
+        """Safe to mark the run as cleaned: no errors, and the session was found if Claude reported one.
+        A run with a session ID but no file found is retried later instead of being trusted."""
+        return not self.errors and (self.found or not session_id)
 
 
 def clean_run(run_dir: Path | str, session_id: str | None, secrets: list[str],

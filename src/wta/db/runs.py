@@ -112,7 +112,7 @@ def clean_saved_sessions(db: Database, projects: Path | None = None) -> tuple[in
     for run_id, run_dir, session_id, password in pending:
         result = clean_run(run_dir, session_id, [password] if password else [], projects)
         problems += result.errors
-        if not result.errors:
+        if result.done(session_id):
             mark_transcript_cleaned(db, run_id)
             cleaned += 1
             replaced += result.replaced

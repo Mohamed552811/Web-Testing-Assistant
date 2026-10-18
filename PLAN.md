@@ -78,3 +78,10 @@ From Phase 9 (2026-10-12):
 - openpyxl needs Pillow only to read image size and bytes. `wta.export.xlsx.PngImage` reads both from the PNG header instead, so openpyxl is pinned to 3.1.x.
 - PDF is rendered by Qt (QTextDocument → QPdfWriter). Under the offscreen test platform Qt has no fonts unless QT_QPA_FONTDIR is set; the real app (windows platform) is unaffected.
 - All four formats of two real sessions were opened in Microsoft Excel and Word (read-only) with no repair prompts. The Bugs sheet uses Azure DevOps column names (Work Item Type, Title, Repro Steps, Severity, Priority, Tags).
+
+From Phase 10 (2026-10-18):
+- Claude Code saves each `claude -p` run under `<config>/projects/<run folder path with non-alphanumerics as "-">/<session id>.jsonl`, prompt included. A scan of the whole Claude folder (credential files skipped) found the test password only in the 2 real runs' session files. They are now clean (8 copies replaced) and the scan finds 0 files.
+- The password has to stay in the session until the run is completely over: a `--resume` continuation still needs it to keep signing in.
+- Windows: session file paths easily pass 260 characters, and then ordinary file calls report the file as missing. The first version marked such a run "cleaned" while the password stayed. Session files are now accessed in the long-path form, and a run is only marked cleaned once its session file was found.
+- The placeholder now reads "[test password, removed after the run]". With plain "[test password]", a resumed Claude assumed it had typed that text and wrongly suspected an authentication bug.
+- Claude Code sometimes fails with "Failed to refresh OAuth token: another Claude Code process is refreshing it" when another Claude Code session is active. It cleared after about 2 minutes. The app showed the message and marked the run failed.
