@@ -169,7 +169,10 @@ def build_prompt(ctx: RunContext) -> str:
 
 ## Browser
 - A browser page is already open and visible to the user. Use only the Playwright browser tools on that page.
-- Do not open new tabs or windows. Do not close the browser.
+- Do not open new tabs yourself, and do not close the browser. If an action opens a new tab or pop-up (a document,
+  a print view), switch to it with the tabs tool, check it, then close that tab and switch back to the first one.
+- If the page opens its print dialog, the app saves what would be printed as print-1.pdf (then print-2.pdf, …) in
+  the working directory. Read that file to check it.
 - Start at {ctx.target_url} unless you are already there.
 
 ## Rules

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Upload (test page)</title>
+<style>
+  body { font-family: Segoe UI, sans-serif; margin: 2rem; }
+  #result { margin-top: 1rem; color: #1a7f37; }
+</style>
+</head>
+<body>
+<h1>Attach a document</h1>
+<p>Local test page for the fixtures-folder uploads. Choose a file and press Upload.</p>
+<form id="form">
+  <label for="file">Document</label>
+  <input id="file" type="file">
+  <button type="submit">Upload</button>
+</form>
+<p id="result" role="status"></p>
+<p><a href="print.html" target="_blank">Open the printable invoice in a new tab</a></p>
+<script>
+  document.getElementById("form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const file = document.getElementById("file").files[0];
+    document.getElementById("result").textContent =
+      file ? `Uploaded ${file.name} (${file.size} bytes)` : "Choose a file first";
+  });
+</script>
+</body>
+</html>

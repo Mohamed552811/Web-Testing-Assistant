@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import QUrl, Signal
+from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
@@ -30,6 +30,46 @@ def make_profile(storage_dir: Path, parent=None) -> QWebEngineProfile:
     profile.setPersistentStoragePath(str(storage_dir / "storage"))
     profile.setCachePath(str(storage_dir / "cache"))
     return profile
+
+
+class AppPage(QWebEnginePage):
+    """A page that opens new tabs and pop-ups (window.open, target=_blank) in a pop-up window,
+    so Playwright can switch to them, and reports print requests."""
+
+    def __init__(self, profile: QWebEngineProfile, parent, pane: "BrowserPane") -> None:
+        super().__init__(profile, parent)
+        self.pane = pane
+        # window.print() in the main frame raises printRequested (checked with Qt 6.12); printRequestedByFrame
+        # covers frames inside the page.
+        self.printRequested.connect(lambda: pane.print_requested.emit(self))
+        self.printRequestedByFrame.connect(
+            lambda frame: pane.print_requested.emit(self) if frame != self.mainFrame() else None)
+
+    def createWindow(self, _type) -> QWebEnginePage:  # noqa: N802 (Qt name)
+        return self.pane.open_popup().view.page()
+
+
+class PopupWindow(QWidget):
+    """A new tab or pop-up opened by the page under test. Closed when the page asks (window.close,
+    or Playwright closing the tab), by its own close button, or by Close all browsers."""
+
+    def __init__(self, pane: "BrowserPane") -> None:
+        # Owned by the main window (closed with it, before the browser profile goes), but a window of its own.
+        super().__init__(pane.window(), Qt.WindowType.Window)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        self.setWindowTitle("New tab (opened by the page)")
+        self.address = QLabel()
+        self.address.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.view = QWebEngineView(self)
+        self.view.setPage(AppPage(pane.profile, self.view, pane))
+        self.view.urlChanged.connect(lambda url: self.address.setText(url.toString()))
+        self.view.titleChanged.connect(lambda title: self.setWindowTitle(f"{title} (opened by the page)"))
+        self.view.page().windowCloseRequested.connect(self.close)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.addWidget(self.address)
+        layout.addWidget(self.view, 1)
+        self.resize(1000, 760)
 
 
 class ControlBanner(QFrame):
@@ -60,13 +100,15 @@ class ControlBanner(QFrame):
 class BrowserPane(QWidget):
     status_message = Signal(str)
     stop_requested = Signal()
+    print_requested = Signal(object)  # the QWebEnginePage that asked to print
 
     def __init__(self, parent: QWidget | None = None, profile: QWebEngineProfile | None = None) -> None:
         super().__init__(parent)
 
         self.view = QWebEngineView(self)
-        if profile is not None:
-            self.view.setPage(QWebEnginePage(profile, self.view))
+        self.profile = profile or QWebEngineProfile.defaultProfile()
+        self.popups: list[PopupWindow] = []
+        self.view.setPage(AppPage(self.profile, self.view, self))
         # The view fills the pane unless a session viewport is set; then it gets that exact
         # size and the scroll area lets it be larger than the pane.
         self.viewport_area = QScrollArea(self)
@@ -109,6 +151,21 @@ class BrowserPane(QWidget):
         self.view.loadStarted.connect(self._on_load_started)
         self.view.loadProgress.connect(self.progress.setValue)
         self.view.loadFinished.connect(self._on_load_finished)
+
+    def open_popup(self) -> PopupWindow:
+        popup = PopupWindow(self)
+        self.popups.append(popup)
+        popup.destroyed.connect(lambda _obj=None, p=popup: self.popups.remove(p) if p in self.popups else None)
+        popup.show()
+        self.status_message.emit("The page opened a new tab; it is shown in its own window.")
+        return popup
+
+    def close_popups(self) -> int:
+        """Close every new tab or pop-up the page opened. Returns how many."""
+        popups = list(self.popups)
+        for popup in popups:
+            popup.close()
+        return len(popups)
 
     def set_controlled(self, controlled: bool, message: str = CONTROLLED_TEXT) -> None:
         """Show or hide the "Claude is controlling this browser" banner."""

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Invoice INV-1001 (test page)</title>
+<style>
+  body { font-family: Segoe UI, sans-serif; margin: 2rem; }
+  table { border-collapse: collapse; }
+  td, th { border: 1px solid #999; padding: 4px 10px; }
+  @media print { button { display: none; } }
+</style>
+</head>
+<body>
+<h1>Invoice INV-1001</h1>
+<p>Customer: Acme Test Ltd</p>
+<table>
+  <tr><th>Item</th><th>Qty</th><th>Price</th></tr>
+  <tr><td>Widget</td><td>2</td><td>10.00</td></tr>
+  <tr><td>Gadget</td><td>1</td><td>5.50</td></tr>
+  <tr><th colspan="2">Total</th><td>25.50</td></tr>
+</table>
+<p><button onclick="window.print()">Print invoice</button></p>
+</body>
+</html>

@@ -103,6 +103,7 @@ class MainWindow(QMainWindow):
         self.browser.view.load(QUrl(START_PAGE))
         self.browser.status_message.connect(self.statusBar().showMessage)
         self.browser.stop_requested.connect(self.stop_run)
+        self.browser.print_requested.connect(self._print_requested)
         self.notifier = Notifier(self, APP_TITLE)
         self._batch_outcomes: list[RunOutcome] = []
         self._batch_smoke = False
@@ -596,11 +597,25 @@ class MainWindow(QMainWindow):
         tracked |= {entry.pid for entry in self.registry.kill_all()}  # anything else still tracked
         self.browser.view.stop()
         self.browser.view.load(QUrl(START_PAGE))
-        parts = (["stopped the run"] if stopped else []) + [
+        popups = self.browser.close_popups()
+        parts = (["stopped the run"] if stopped else []) + ([f"closed {popups} tab(s) the page opened"] if popups else []) + [
             f"closed {len(tracked)} process(es) the app started",
             "cleared the embedded browser",
         ]
         self.statusBar().showMessage("Close all browsers: " + ", ".join(parts) + ".")
+
+    def _print_requested(self, page) -> None:
+        """During a run, save what the page would print as print-N.pdf in the run folder, for Claude to read."""
+        run = self.batch_run.current if self.batch_run is not None else None
+        if run is None:
+            self.statusBar().showMessage("The page asked to print. Printing is only captured during a test run.", 8000)
+            return
+        number = 1
+        while (run.job.run_dir / f"print-{number}.pdf").exists():
+            number += 1
+        path = run.job.run_dir / f"print-{number}.pdf"
+        page.printToPdf(str(path))
+        run.add_note(f"App: the page asked to print; saved as {path.name} in the run folder.")
 
     def _on_navigation_blocked(self, url: str) -> None:
         message = f"Blocked navigation to {url}: outside the allowed domains."
@@ -675,6 +690,7 @@ class MainWindow(QMainWindow):
                 return
             self.batch_run.stop()
         self.registry.kill_all()  # on exit, close everything the app started
+        self.browser.close_popups()
         self._save_ui_state()
         super().closeEvent(event)
 
