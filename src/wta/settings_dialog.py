@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from wta.settings import EXPORT_FORMATS, SCREENSHOT_TIMINGS, Settings
+from wta.theme import THEMES
 
 
 class SettingsDialog(QDialog):
@@ -33,7 +34,11 @@ class SettingsDialog(QDialog):
         )
 
         self.tester_name = QLineEdit(placeholderText="e.g. Staff QA")
+        self.theme = QComboBox()
+        for key, label in THEMES.items():
+            self.theme.addItem(label, key)
         form = QFormLayout()
+        form.addRow("Theme", self.theme)
         form.addRow("Tester name", self.tester_name)
         form.addRow("Screenshot timing", self.screenshot_timing)
         form.addRow("Export format", self.export_format)
@@ -53,6 +58,7 @@ class SettingsDialog(QDialog):
         self.export_format.setCurrentIndex(self.export_format.findData(settings.export_format))
         self.confirm_risky.setChecked(settings.confirm_risky_actions)
         self.tester_name.setText(settings.tester_name)
+        self.theme.setCurrentIndex(max(0, self.theme.findData(settings.theme)))
 
     def settings(self) -> Settings:
         return Settings(
@@ -60,4 +66,5 @@ class SettingsDialog(QDialog):
             export_format=self.export_format.currentData(),
             confirm_risky_actions=self.confirm_risky.isChecked(),
             tester_name=self.tester_name.text(),
+            theme=self.theme.currentData(),
         ).cleaned()

@@ -32,6 +32,8 @@ class Settings:
     confirm_risky_actions: bool = False
     # Shown as "Tester" in exported reports.
     tester_name: str = ""
+    # "system" (follow Windows), "light" or "dark".
+    theme: str = "system"
 
     def cleaned(self) -> "Settings":
         """Unknown values fall back to the defaults."""
@@ -42,6 +44,7 @@ class Settings:
             export_format=self.export_format if self.export_format in EXPORT_FORMATS else default.export_format,
             confirm_risky_actions=bool(self.confirm_risky_actions),
             tester_name=self.tester_name.strip()[:100],
+            theme=self.theme if self.theme in ("system", "light", "dark") else default.theme,
         )
 
 
