@@ -21,7 +21,8 @@ MCP_SERVER_NAME = "playwright"
 # All tools of the MCP server above (Claude Code's mcp__<server> permission syntax).
 PLAYWRIGHT_TOOLS = f"mcp__{MCP_SERVER_NAME}"
 # Browser tools a test run may use. Left out on purpose: browser_evaluate and
-# browser_run_code_unsafe (arbitrary JavaScript), browser_file_upload, browser_close.
+# browser_run_code_unsafe (arbitrary JavaScript), browser_close, and browser_file_upload
+# (allowed only when the session has a fixtures folder, see run_args).
 PLAYWRIGHT_RUN_TOOLS = tuple(
     f"mcp__{MCP_SERVER_NAME}__browser_{name}"
     for name in (
@@ -35,6 +36,7 @@ PLAYWRIGHT_DENIED_TOOLS = tuple(
     f"mcp__{MCP_SERVER_NAME}__browser_{name}"
     for name in ("evaluate", "run_code_unsafe", "file_upload", "close", "install")
 )
+UPLOAD_TOOL = f"mcp__{MCP_SERVER_NAME}__browser_file_upload"
 # Built-in tools for writing results.json and screenshots; --restricted confines them to the run folder.
 FILE_TOOLS = ("Read", "Write", "Edit")
 # Never passed to Claude Code, so it always uses the user's subscription login.
@@ -114,12 +116,16 @@ def resume_command(run_dir: Path, session_id: str) -> str:
                             cwd=run_dir)
 
 
-def run_args(mcp_config: Path, resume_session: str | None = None, model: str = "") -> list[str]:
+def run_args(mcp_config: Path, resume_session: str | None = None, model: str = "",
+             allow_upload: bool = False) -> list[str]:
     """Arguments (after the executable) for a test run. The prompt is written to stdin,
     so the test account never appears on a command line. `resume_session` continues an
     earlier run (used after the user answers a confirmation request). `model` is an alias
-    such as "sonnet" or a full model name; empty means Claude Code's own default."""
+    such as "sonnet" or a full model name; empty means Claude Code's own default.
+    `allow_upload` permits the file upload tool; Playwright MCP limits it to files in the run folder."""
     resume = ["--resume", resume_session] if resume_session else []
+    allowed = FILE_TOOLS + PLAYWRIGHT_RUN_TOOLS + ((UPLOAD_TOOL,) if allow_upload else ())
+    denied = tuple(t for t in PLAYWRIGHT_DENIED_TOOLS if not (allow_upload and t == UPLOAD_TOOL))
     return resume + (["--model", model] if model else []) + [
         "-p",
         "--output-format", "stream-json",
@@ -130,8 +136,8 @@ def run_args(mcp_config: Path, resume_session: str | None = None, model: str = "
         # and confines file tools to the working directory (the run folder).
         "--restricted",
         "--tools=" + ",".join(FILE_TOOLS),
-        "--allowedTools", ",".join(FILE_TOOLS + PLAYWRIGHT_RUN_TOOLS),
-        "--disallowedTools", ",".join(PLAYWRIGHT_DENIED_TOOLS),
+        "--allowedTools", ",".join(allowed),
+        "--disallowedTools", ",".join(denied),
         "--permission-mode", "dontAsk",
     ]
 

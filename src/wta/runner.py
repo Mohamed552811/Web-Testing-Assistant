@@ -16,7 +16,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QIODevice, QObject, QProcess, QProcessEnvironment, QTimer, Signal
 
-from wta import claude_launcher, processes, session_files, usage
+from wta import claude_launcher, fixtures, processes, session_files, usage
 from wta.db.database import Database
 from wta.db import runs
 from wta.db.models import RunOutcomeKind, StepStatus, TraceKind
@@ -47,6 +47,7 @@ class ScenarioJob:
     model: str = ""  # passed to `claude --model`; empty = Claude Code's default
     # The session's other test passwords: redacted too, although only this run's account is in the prompt.
     secrets: tuple[str, ...] = ()
+    fixtures_dir: str = ""  # the session's fixtures folder; the files listed in the context are copied in
 
     @property
     def planned_steps(self) -> int:
@@ -159,6 +160,8 @@ class ScenarioRun(QObject):
         self._mcp_config = claude_launcher.write_mcp_config(
             run_dir / "mcp.json", self.cdp_port, run_dir / "playwright-output"
         )
+        if self.job.context.fixture_files:
+            fixtures.copy_into_run(self.job.fixtures_dir, self.job.context.fixture_files, run_dir)
         prompt = build_prompt(self.job.context)
         (run_dir / "prompt.md").write_text(self.redact(prompt), encoding="utf-8")
         self._trace_file = open(run_dir / "trace.jsonl", "w", encoding="utf-8")
@@ -188,8 +191,9 @@ class ScenarioRun(QObject):
         process.setProcessEnvironment(env)
         process.setWorkingDirectory(str(self.job.run_dir))
         process.setProgram(command[0])
-        process.setArguments(command[1:] + claude_launcher.run_args(self._mcp_config, resume_session=resume,
-                                                                     model=self.job.model))
+        process.setArguments(command[1:] + claude_launcher.run_args(
+            self._mcp_config, resume_session=resume, model=self.job.model,
+            allow_upload=bool(self.job.context.fixture_files)))
         process.setStandardErrorFile(str(self.job.run_dir / "stderr.log"), QIODevice.OpenModeFlag.Append)
         process.readyReadStandardOutput.connect(self._read_stdout)
         process.finished.connect(lambda code, _status: self._on_process_finished(code))

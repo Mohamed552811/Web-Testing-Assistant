@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from wta import __version__
-from wta import cdp, cost, icons, theme
+from wta import cdp, cost, fixtures, icons, theme
 from wta import settings as app_settings
 from wta.welcome import AboutDialog, WelcomePage
 from wta.browser import BrowserPane, make_profile
@@ -499,6 +499,9 @@ class MainWindow(QMainWindow):
 
         runs_dir = default_runs_dir(self.app_dir)
         passwords = store.session_passwords(session)
+        fixture_files, skipped = fixtures.list_files(session.fixtures_dir)
+        if skipped:
+            self.statusBar().showMessage("Not offered for uploads: " + "; ".join(skipped), 15000)
 
         def account(scenario):
             return store.account_for(session, scenario.account_id)
@@ -510,6 +513,7 @@ class MainWindow(QMainWindow):
                 run_dir=run_folder(runs_dir, session.id, batch, scenario.position, smoke=scenario.smoke_page is not None),
                 model=self.settings.smoke_model if scenario.smoke_page else self.settings.scenario_model,
                 secrets=tuple(p for p in passwords if p != account(scenario).password),
+                fixtures_dir=session.fixtures_dir or "",
                 context=RunContext(
                     session_name=session.name,
                     target_url=session.target_url,
@@ -517,6 +521,7 @@ class MainWindow(QMainWindow):
                     test_account_email=account(scenario).email,
                     test_account_password=account(scenario).password,
                     test_account_role="" if scenario.account_id is None else account(scenario).role,
+                    fixture_files=fixture_files,
                     scenario_name=scenario.name,
                     scenario_steps=scenario.test_steps or "",
                     scenario_expected_result=scenario.expected_result or "",

@@ -24,6 +24,7 @@ class RunContext:
     screenshot_timing: str = SCREENSHOTS_BUG_BLOCKED
     scenario_expected_result: str = ""
     test_account_role: str = ""  # e.g. "Sales manager"; empty for the session's main account
+    fixture_files: list[str] = field(default_factory=list)  # under fixtures/ in the run folder
 
 
 @dataclass
@@ -135,6 +136,15 @@ def _work_intro(ctx: RunContext) -> str:
     )
 
 
+def _uploads_section(files: list[str]) -> str:
+    if not files:
+        return ("## File uploads\nNo files are available for uploads. If a step needs a file upload, mark it "
+                "\"blocked\" and say which file it needed.\n\n")
+    listed = "\n".join(f"- fixtures/{name}" for name in files)
+    return ("## File uploads\nFor upload fields, use the file upload tool with only these files (paths relative to "
+            f"the working directory). Never upload any other file.\n{listed}\n\n")
+
+
 def _screenshot_rule(ctx: RunContext) -> str:
     how = (f'take one with the screenshot tool using filename "{SCREENSHOT_DIR}/step-<order>.png" '
            'and put that relative path in "screenshot"')
@@ -174,7 +184,7 @@ def build_prompt(ctx: RunContext) -> str:
 
 {_task_section(ctx)}
 
-{_site_notes_section(ctx.site_notes)}## How to work
+{_uploads_section(ctx.fixture_files)}{_site_notes_section(ctx.site_notes)}## How to work
 {_work_intro(ctx)}
 - When finished (or when the scenario cannot continue), write {RESULTS_FILE} one last time with "state": "done" and a "summary".
 - Step status: "pass" (worked as expected), "fail" (a product bug), "blocked" (could not be checked: captcha, outside allowed domains, environment down, missing data), "not_run" (planned but not reached).
