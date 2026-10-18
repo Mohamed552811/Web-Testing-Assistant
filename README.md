@@ -46,12 +46,12 @@ This installs PySide6, SQLAlchemy, openpyxl and python-docx. The first test run 
 
 ## Using it
 
-1. **Session → New session**: enter the target URL, allowed domains, viewport and a test-environment account.
+1. **Session → New session**: enter the target URL, allowed domains, viewport and a test-environment account. You can add **other accounts** (roles such as "Sales manager") and choose a **folder of files Claude may upload**; each scenario or smoke page can then **run as** one of the accounts.
 2. **Scenarios tab**: add up to 5 scenarios per batch in plain language, then press **Run batch**.
    **Smoke test tab**: describe one page (URL, how to reach it, login needed, what's on it) and Claude writes and runs a checklist.
 3. **Live run tab**: a timeline of each action, what Claude saw (one line; click to expand) and its notes, with "Step 4 of 5" progress and a timer. **Stop** ends the run at once. A banner over the browser reminds you not to click in the page while Claude works, and Windows shows a notification when a run finishes or Claude asks for confirmation.
 4. Review every step: **Approve**, **Override** the status, add a comment, or **Request re-run**. A step is final only after your review.
-5. **Runs tab**: reopen past runs and their traces, and write **site notes**. Notes are added to the next run's prompt for that site.
+5. **Runs tab**: reopen past runs and their traces, and write **site notes**. Notes are added to the next run's prompt for that site. **Errors and speed** lists what the app itself saw on the page during the run: console errors, uncaught JavaScript errors, failed requests, page load times (slow from 3 s) and, for smoke tests, low text contrast. It covers every step, including ones that passed.
 6. **Session → Export report** (Ctrl+E): Excel, PDF, Word or Markdown.
    - Excel's Bugs sheet uses Azure DevOps / TFS field names, so it can be imported.
    - Markdown writes a folder with `SUMMARY.md` (test information, scope, results per test case, overall result, bugs found, attachments), one `BUG-NNN-<title>.md` per bug, and the screenshots. Key Findings, Recommendations, Impact and Notes are left empty for you to fill in.
@@ -65,6 +65,8 @@ The bar at the top shows Claude Code sign-in and your 5-hour and weekly plan usa
 
 - Claude gets only browser tools and file writes inside the run folder. It has no shell access and does not load your own Claude Code settings or hooks.
 - During a run the embedded browser refuses to open pages outside the session's allowed domains.
+- Uploads are possible only from the session's upload folder: its files are copied into the run folder, and Claude can upload nothing else.
+- Pages the site opens in a new tab appear in their own window; Claude may switch to them and close them. When a page prints, the app saves the printout as a PDF in the run folder.
 - Page content is treated as data. Instructions found on a page are ignored and reported as notices.
 - **Close all browsers** stops any run and closes every process the app started, tracked by process ID. It never touches your own browsers. It also runs when the app closes.
 - The test account stays in the local database. The password is redacted from run files and exported reports; the account email may appear in exported reports.
@@ -93,13 +95,13 @@ Run the tests:
 
 The tests use a fake `claude` and never spend plan usage.
 
-`test_pages/` holds local pages for trying the app: a login app with a deliberate bug (`app.html`), a prompt-injection page (`trap.html`) and a notes list for the confirmation pause (`notes.html`). Serve them with:
+`test_pages/` holds local pages for trying the app: a login app with a deliberate bug (`app.html`), a prompt-injection page (`trap.html`), a notes list for the confirmation pause (`notes.html`), an upload form with a deliberately faint line (`upload.html`) and a printable invoice that opens in a new tab (`print.html`). Serve them with:
 
 ```bash
 .venv/Scripts/python -m http.server 8765 --bind 127.0.0.1 --directory test_pages
 ```
 
-The local login app's test account is in `test_pages/test-account.json`.
+The local login app's test accounts (a main one and a Manager role) are in `test_pages/test-account.json`.
 
 See `CLAUDE.md` for the project rules and `PLAN.md` for the build phases and findings.
 
