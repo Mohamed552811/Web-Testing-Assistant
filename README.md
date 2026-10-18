@@ -24,7 +24,27 @@ claude auth status --text
 
 If Claude Code is not signed in, run `claude auth login` in a terminal. The app checks this on startup and blocks test runs until it passes.
 
-## Setup
+## Install with Setup.exe
+
+The easiest way on another Windows machine: run `WebTestingAssistant-Setup-<version>.exe` (built as below). It installs for your user without administrator rights, adds a Start-menu shortcut (a desktop shortcut is optional) and an uninstaller. Uninstalling keeps your sessions, runs, settings and backups in `%APPDATA%\Web Testing Assistant`.
+
+The machine still needs Node.js and a signed-in Claude Code; on first start the app checks both and explains how to install what is missing (also under **Help → Check setup**).
+
+### Build the installer
+
+Needs Inno Setup 6 (`winget install JRSoftware.InnoSetup`) and the build tools:
+
+```bash
+.venv/Scripts/python -m pip install -r tools/build-requirements.txt
+```
+
+```bash
+.venv/Scripts/python tools/build_installer.py
+```
+
+This bundles the app with PyInstaller (`dist/WebTestingAssistant/`), runs the bundle's self-check, and writes `dist/installer/WebTestingAssistant-Setup-<version>.exe`. The version comes from `src/wta/__init__.py`. An installed copy can check itself without opening a window: `WebTestingAssistant.exe --self-check report.json`.
+
+## Setup (from source)
 
 From the repository root:
 
