@@ -1,7 +1,8 @@
 """Table model for a scenario's steps: Claude's result beside the user's review."""
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt
-from PySide6.QtGui import QBrush, QColor, QFont
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, QRect, Qt
+from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QPainter, QPalette, QPen
+from PySide6.QtWidgets import QApplication, QStyle, QStyledItemDelegate, QStyleOptionViewItem
 
 from wta.db.models import ReviewDecision, Step, StepStatus
 
@@ -114,3 +115,67 @@ class StepTableModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.TextAlignmentRole and column == 0:
             return int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
         return None
+
+
+# --- status badges ----------------------------------------------------------------
+
+# Solid badge colours. Fail/Bug is a bright red, deliberately unlike the brick-red accent.
+BADGE_COLORS = {
+    StepStatus.PASS: "#2E8B57",
+    StepStatus.FAIL: "#E5484D",
+    StepStatus.BLOCKED: "#C77700",
+    StepStatus.NOT_RUN: "#6B7280",
+}
+
+
+def effective_status(step: Step) -> StepStatus:
+    """The status that counts: the reviewed one, or Claude's while not reviewed."""
+    return step.final_status if step.final_status is not None else step.status
+
+
+class StatusBadgeDelegate(QStyledItemDelegate):
+    """Draws the status columns as coloured pills; "Pending review" and "Re-run requested" as outlines."""
+
+    def __init__(self, model: StepTableModel, parent=None) -> None:
+        super().__init__(parent)
+        self.model = model
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
+        step = self.model.step_at(index.row())
+        if step is None or index.column() not in (COL_CLAUDE_STATUS, COL_FINAL_STATUS):
+            super().paint(painter, option, index)
+            return
+        # Background and selection as usual, but no text: the badge carries it.
+        clean = QStyleOptionViewItem(option)
+        self.initStyleOption(clean, index)
+        clean.text = ""
+        clean.backgroundBrush = QBrush(Qt.BrushStyle.NoBrush)
+        widget = option.widget
+        style = widget.style() if widget else QApplication.style()
+        style.drawControl(QStyle.ControlElement.CE_ItemViewItem, clean, painter, widget)
+
+        text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+        status = step.status if index.column() == COL_CLAUDE_STATUS else step.final_status
+        font = QFont(option.font)
+        font.setPointSizeF(max(7.5, font.pointSizeF() - 0.5))
+        font.setBold(status is not None)
+        metrics = QFontMetrics(font)
+        width = min(metrics.horizontalAdvance(text) + 16, option.rect.width() - 8)
+        height = metrics.height() + 6
+        rect = QRect(option.rect.left() + 4, option.rect.top() + 6, width, height)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setFont(font)
+        if status is not None:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(BADGE_COLORS[status]))
+            painter.drawRoundedRect(rect, height / 2, height / 2)
+            painter.setPen(QColor("#ffffff"))
+        else:  # not final yet: outlined
+            color = QColor(option.palette.color(QPalette.ColorRole.Highlight) if text == RERUN
+                           else option.palette.color(QPalette.ColorRole.PlaceholderText))
+            painter.setPen(QPen(color, 1.2))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(rect.adjusted(0, 0, -1, -1), height / 2, height / 2)
+        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, metrics.elidedText(text, Qt.TextElideMode.ElideRight, width - 10))
+        painter.restore()

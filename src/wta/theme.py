@@ -97,6 +97,11 @@ def stylesheet(p: Palette) -> str:
     QStatusBar {{ background: {p.panel}; color: {p.muted}; border-top: 1px solid {p.border}; }}
     QSplitter::handle {{ background: {p.window}; }}
     QLabel[muted="true"] {{ color: {p.muted}; }}
+    QToolButton[chip="true"] {{ background: {p.panel}; color: {p.text}; border: 1px solid {p.border};
+                  border-radius: 11px; padding: 3px 10px; }}
+    QToolButton[chip="true"]:hover {{ border-color: {p.accent}; }}
+    QToolButton[chip="true"]:checked {{ background: {p.accent}; color: {p.accent_text}; border-color: {p.accent};
+                  font-weight: 600; }}
     QLabel[heading="true"] {{ font-size: 16pt; font-weight: 600; color: {p.text}; }}
     QScrollBar:vertical {{ background: transparent; width: 10px; }}
     QScrollBar::handle:vertical {{ background: {p.border}; border-radius: 5px; min-height: 24px; }}
