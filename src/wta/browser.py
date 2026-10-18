@@ -6,8 +6,11 @@ from PySide6.QtCore import QUrl, Signal
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
+    QPushButton,
     QProgressBar,
     QScrollArea,
     QToolButton,
@@ -18,6 +21,7 @@ from PySide6.QtWidgets import (
 from wta.urls import normalize_url
 
 PROFILE_NAME = "wta-browser"
+CONTROLLED_TEXT = "Claude is controlling this browser. Please don't click or type in the page until the run ends."
 
 
 def make_profile(storage_dir: Path, parent=None) -> QWebEngineProfile:
@@ -28,8 +32,34 @@ def make_profile(storage_dir: Path, parent=None) -> QWebEngineProfile:
     return profile
 
 
+class ControlBanner(QFrame):
+    """Shown over the browser while Claude runs a test, with its own Stop button."""
+
+    stop_requested = Signal()
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("controlBanner")
+        self.setStyleSheet("#controlBanner { background: #C77700; } #controlBanner QLabel { color: white; "
+                           "font-weight: 600; }")
+        self.icon = QLabel()
+        self.message = QLabel(CONTROLLED_TEXT)
+        self.message.setWordWrap(True)
+        self.stop_button = QPushButton("Stop")
+        self.stop_button.setToolTip("Stop the run now: ends Claude Code and everything it started")
+        self.stop_button.setStyleSheet("QPushButton { background: #da3633; color: white; font-weight: bold; "
+                                       "border: 1px solid white; border-radius: 6px; padding: 3px 12px; }")
+        self.stop_button.clicked.connect(self.stop_requested)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 6, 8, 6)
+        layout.addWidget(self.icon)
+        layout.addWidget(self.message, 1)
+        layout.addWidget(self.stop_button)
+
+
 class BrowserPane(QWidget):
     status_message = Signal(str)
+    stop_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None, profile: QWebEngineProfile | None = None) -> None:
         super().__init__(parent)
@@ -52,6 +82,9 @@ class BrowserPane(QWidget):
 
         self.progress = QProgressBar(maximumHeight=3, textVisible=False)
         self.progress.hide()
+        self.banner = ControlBanner(self)
+        self.banner.stop_requested.connect(self.stop_requested)
+        self.banner.hide()
 
         toolbar = QHBoxLayout()
         toolbar.setContentsMargins(6, 6, 6, 6)
@@ -63,6 +96,7 @@ class BrowserPane(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addLayout(toolbar)
+        layout.addWidget(self.banner)
         layout.addWidget(self.progress)
         layout.addWidget(self.viewport_area, 1)
 
@@ -75,6 +109,11 @@ class BrowserPane(QWidget):
         self.view.loadStarted.connect(self._on_load_started)
         self.view.loadProgress.connect(self.progress.setValue)
         self.view.loadFinished.connect(self._on_load_finished)
+
+    def set_controlled(self, controlled: bool, message: str = CONTROLLED_TEXT) -> None:
+        """Show or hide the "Claude is controlling this browser" banner."""
+        self.banner.message.setText(message)
+        self.banner.setVisible(controlled)
 
     def set_viewport(self, width: int, height: int) -> None:
         """Give the page exactly width x height CSS pixels (at 100% zoom)."""

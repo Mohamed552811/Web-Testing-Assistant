@@ -29,13 +29,14 @@ from wta.welcome import AboutDialog, WelcomePage
 from wta.browser import BrowserPane, make_profile
 from wta.connection_dialog import ConnectionDialog
 from wta.domain_guard import NavigationGuard
+from wta.notify import Notifier
 from wta.processes import ProcessRegistry
 from wta.results import ConfirmationRequest
 from wta.db import Database, store
 from wta.db import runs as run_store
 from wta.db import scenarios as sc
 from wta.db import site_notes
-from wta.db.models import TestSession
+from wta.db.models import StepStatus, TestSession
 from wta.paths import data_dir, database_path
 from wta.db.models import ScenarioKind
 from wta.prompt import RunContext, SmokeContext
@@ -101,6 +102,10 @@ class MainWindow(QMainWindow):
         self.browser = BrowserPane(self, profile)
         self.browser.view.load(QUrl(START_PAGE))
         self.browser.status_message.connect(self.statusBar().showMessage)
+        self.browser.stop_requested.connect(self.stop_run)
+        self.notifier = Notifier(self, APP_TITLE)
+        self._batch_outcomes: list[RunOutcome] = []
+        self._batch_smoke = False
 
         self.scenario_tab = ScenarioTab(db, self)
         self.scenario_tab.status_message.connect(self.statusBar().showMessage)
@@ -239,6 +244,8 @@ class MainWindow(QMainWindow):
                                        (tab.site_note_button, "file-plus", None)):
                 icons.set_icon(button, name, role)
         icons.set_icon(self.run_panel.stop_button, "square", "on-accent")
+        self.browser.banner.icon.setPixmap(icons.icon("bot", "#ffffff").pixmap(20, 20))
+        icons.set_icon(self.browser.banner.stop_button, "square", "on-accent")
         icons.set_icon(self.runs_tab.open_folder_button, "folder")
         icons.set_icon(self.runs_tab.copy_resume_button, "copy")
         icons.set_icon(self.runs_tab.refresh_button, "rotate-cw")
@@ -513,6 +520,7 @@ class MainWindow(QMainWindow):
         self.batch_run.confirmation_needed.connect(self._ask_confirmation)
         self.batch_run.scenario_started.connect(self.run_panel.scenario_started)
         self.batch_run.event.connect(self.run_panel.add_event)
+        self.batch_run.progress.connect(self.run_panel.set_progress)
         for tab in self.review_tabs:
             self.batch_run.results_changed.connect(tab.refresh)
         self.batch_run.usage_changed.connect(lambda _state: self.top_bar.refresh_usage())
@@ -520,6 +528,10 @@ class MainWindow(QMainWindow):
         self.batch_run.all_finished.connect(self._batch_finished)
         self.run_panel.clear()
         self.run_panel.set_running(True)
+        self.browser.set_controlled(True)
+        self.notifier.run_started()
+        self._batch_outcomes = []
+        self._batch_smoke = kind == ScenarioKind.SMOKE
         self.tabs.setCurrentWidget(self.run_panel)
         self._update_run_state()
         self.batch_run.start()
@@ -561,7 +573,10 @@ class MainWindow(QMainWindow):
         box.setInformativeText(f"Why: {request.reason or '(no reason given)'}\n\nAllow it?")
         allow = box.addButton("Allow", QMessageBox.ButtonRole.AcceptRole)
         box.addButton("Decline", QMessageBox.ButtonRole.RejectRole)
+        self.browser.set_controlled(True, "Claude is waiting for your confirmation before a risky action.")
+        self.notifier.notify("Claude needs your confirmation", f"Risky action{step}: {request.action}", warning=True)
         box.exec()
+        self.browser.set_controlled(self.batch_run is not None)
         if self.batch_run is None or run.stopped:
             return  # stopped while the question was open
         run.answer_confirmation(box.clickedButton() is allow)
@@ -569,6 +584,7 @@ class MainWindow(QMainWindow):
     def _scenario_finished(self, outcome: RunOutcome) -> None:
         title = next((j.title for j in self.batch_run.jobs if j.scenario_id == outcome.scenario_id), "Scenario")
         self.run_panel.scenario_finished(outcome, title)
+        self._batch_outcomes.append(outcome)
         for tab in self.review_tabs:
             tab.refresh(outcome.scenario_id)
         self.runs_tab.refresh()
@@ -576,13 +592,35 @@ class MainWindow(QMainWindow):
     def _batch_finished(self) -> None:
         if self.guard is not None:
             self.guard.deactivate()
-        self.run_panel.all_finished(stopped=self.batch_run.stopped)
+        stopped = self.batch_run.stopped
+        self.run_panel.all_finished(stopped=stopped)
+        self.browser.set_controlled(False)
+        heading, message = self._batch_message(stopped)
+        self.notifier.notify(heading, message, warning=stopped)
         self.batch_run.deleteLater()
         self.batch_run = None
         self._update_run_state()
         self.statusBar().showMessage(
             "Run finished. Review each step on the Scenarios or Smoke test tab; add site notes on the Runs tab."
         )
+
+    def _batch_message(self, stopped: bool) -> tuple[str, str]:
+        """Notification text for the end of a batch: what ran and what needs review."""
+        outcomes = self._batch_outcomes
+        failed = sum(1 for o in outcomes if not o.stopped and not (o.summary and o.summary.ok))
+        steps = [step for o in outcomes for step in sc.scenario_steps(self.db, o.scenario_id)]
+        labels = ((StepStatus.PASS, "pass"), (StepStatus.FAIL, "bug" if self._batch_smoke else "fail"),
+                  (StepStatus.BLOCKED, "blocked"),
+                  (StepStatus.NOT_RUN, "not run"))
+        counts = {status: sum(1 for s in steps if s.status == status) for status, _ in labels}
+        found = ", ".join(f"{counts[status]} {label}" for status, label in labels if counts[status])
+        item, unit = ("page", "checks") if self._batch_smoke else ("scenario", "steps")
+        ran = f"{len(outcomes)} {item}{'' if len(outcomes) == 1 else 's'}"
+        heading = "Run stopped" if stopped else ("Run finished with problems" if failed else "Run finished")
+        message = f"{ran}, {len(steps)} {unit}" + (f": {found}" if found else "") + ". Ready for your review."
+        if failed:
+            message += f" {failed} ended with an error; see the Live run tab."
+        return heading, message
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if self.batch_run is not None:
