@@ -28,6 +28,7 @@ from wta import settings as app_settings
 from wta.welcome import AboutDialog, WelcomePage
 from wta.housekeeping_dialog import HousekeepingDialog
 from wta.search_dialog import SearchDialog
+from wta.setup_check import SetupDialog
 from wta.trends_dialog import TrendsDialog
 from wta.browser import BrowserPane, make_profile
 from wta.connection_dialog import ConnectionDialog
@@ -104,6 +105,9 @@ class MainWindow(QMainWindow):
         self.top_bar = TopBar(self.app_dir / USAGE_FILE, self)
         self.top_bar.sign_in_changed.connect(lambda _ok: self._update_run_state())
         self.top_bar.close_all_requested.connect(self.close_all_browsers)
+        self.top_bar.setup_checked.connect(self._setup_checked)
+        self.setup_dialog: SetupDialog | None = None
+        self._setup_shown = False
 
         self.browser = BrowserPane(self, profile)
         self.browser.view.load(QUrl(START_PAGE))
@@ -222,6 +226,9 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self.housekeeping_action)
 
         help_menu = self.menuBar().addMenu("&Help")
+        setup_action = QAction("Check &setup…", self)
+        setup_action.triggered.connect(self.show_setup)
+        help_menu.addAction(setup_action)
         about = QAction("&About Web Testing Assistant", self)
         about.triggered.connect(lambda: AboutDialog(self).exec())
         help_menu.addAction(about)
@@ -464,7 +471,9 @@ class MainWindow(QMainWindow):
         if self.current_session is None:
             return "Open a session first."
         if not self.top_bar.signed_in:
-            return "Claude Code must be installed and signed in (see the top bar)."
+            return "Claude Code must be installed and signed in (Help, Check setup)."
+        if not self.top_bar.node_ok:
+            return "Node.js 18 or later must be installed for the browser tools (Help, Check setup)."
         if self.cdp_port is None:
             return "The embedded browser has no debugging port."
         if self.cdp_info is None:
@@ -623,6 +632,22 @@ class MainWindow(QMainWindow):
         tab = self.smoke_tab if sc.scenario_kind(self.db, hit.scenario_id) == ScenarioKind.SMOKE else self.scenario_tab
         self.tabs.setCurrentWidget(tab)
         tab.show_scenario(hit.scenario_id, hit.step_id)
+
+    def show_setup(self) -> None:
+        """What is installed and signed in, and how to fix what is not."""
+        if self.setup_dialog is None:
+            self.setup_dialog = SetupDialog(self.top_bar.claude_status, self.top_bar.node_status, self)
+            self.setup_dialog.check_again.connect(self.top_bar.check_sign_in)
+        self.setup_dialog.show_status(self.top_bar.claude_status, self.top_bar.node_status)
+        self.setup_dialog.show()
+        self.setup_dialog.raise_()
+
+    def _setup_checked(self, claude, node) -> None:
+        if self.setup_dialog is not None:
+            self.setup_dialog.show_status(claude, node)
+        if not (claude.ok and node.ok) and not self._setup_shown:
+            self._setup_shown = True  # on its own only once per start; Help, Check setup any time
+            self.show_setup()
 
     def show_trends(self) -> None:
         site = site_notes.site_for_url(self.current_session.target_url) if self.current_session else ""
@@ -855,6 +880,12 @@ def _set_windows_app_id() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(argv if argv is not None else sys.argv)
+    if "--self-check" in argv:  # check an installed build without opening the window (see self_check.py)
+        index = argv.index("--self-check")
+        report = Path(argv[index + 1]) if index + 1 < len(argv) else data_dir() / "self-check.json"
+        from wta import self_check
+        check_app = QApplication(argv[:1])
+        return self_check.run(report, check_app)
     cdp_port = cdp.find_free_port()
     _set_windows_app_id()  # before any window: the taskbar then shows our logo, not Python's
     app = QApplication(argv + cdp.enable(cdp_port))  # must happen before QApplication
