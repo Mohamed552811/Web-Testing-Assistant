@@ -329,6 +329,8 @@ class Run(Base):
     # Claude Code's own session for this run, and when the test password was removed from it.
     claude_session_id: Mapped[str | None] = mapped_column(String(64))
     transcript_cleaned_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # When housekeeping deleted this run's folder (its history in the database stays).
+    files_removed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     scenario: Mapped[Scenario] = relationship(back_populates="runs")
     page_issues: Mapped[list["PageIssue"]] = relationship(

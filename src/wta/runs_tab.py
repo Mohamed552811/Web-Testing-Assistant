@@ -273,7 +273,7 @@ class RunsTab(QWidget):
 
     def _show_run(self) -> None:
         run = self._current_run()
-        self.open_folder_button.setEnabled(run is not None)
+        self.open_folder_button.setEnabled(run is not None and run.files_removed_at is None)
         self.copy_resume_button.setEnabled(run is not None and bool(run.claude_session_id))
         self.compare_button.setEnabled(run is not None)
         self.session_label.setText(self._session_text(run))
@@ -297,6 +297,8 @@ class RunsTab(QWidget):
         ]
         if run.site_notes_used:
             parts.append(f"Used {run.site_notes_used} site note(s)")
+        if run.files_removed_at:
+            parts.append(f"Run folder removed by clean-up on {local_time(run.files_removed_at)}")
         if usage:
             parts.append("Plan usage: " + ", ".join(usage))
         if run.summary:
