@@ -89,6 +89,48 @@ def parse_auth_status(returncode: int, stdout: str) -> SignInStatus:
     return SignInStatus(True, f"Signed in to Claude Code ({subscription or 'subscription'})", subscription)
 
 
+# Node.js runs Playwright MCP (started with npx). Playwright MCP needs Node.js 18 or later.
+MIN_NODE_MAJOR = 18
+NODE_DOWNLOAD_URL = "https://nodejs.org/en/download"
+CLAUDE_SETUP_URL = "https://code.claude.com/docs/en/setup"
+CLAUDE_INSTALL_POWERSHELL = "irm https://claude.ai/install.ps1 | iex"
+
+
+@dataclass
+class NodeStatus:
+    ok: bool
+    message: str
+    version: str = ""
+
+
+def parse_node_version(text: str) -> tuple[int, ...] | None:
+    """(major, minor, patch) from `node --version` output such as "v22.11.0"."""
+    parts = text.strip().lstrip("v").split(".")
+    try:
+        return tuple(int(p) for p in parts[:3])
+    except ValueError:
+        return None
+
+
+def check_node(timeout: float = 20) -> NodeStatus:
+    """Is a recent enough Node.js (with npx) installed? Blocking; call it off the UI thread."""
+    node, npx = shutil.which("node"), shutil.which("npx")
+    if node is None or npx is None:
+        return NodeStatus(False, "Node.js is not installed (no `node`/`npx` on PATH). It runs the browser tools.")
+    try:
+        done = subprocess.run([node, "--version"], capture_output=True, text=True, timeout=timeout,
+                              stdin=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return NodeStatus(False, f"Could not run Node.js: {exc}")
+    version = parse_node_version(done.stdout)
+    if version is None:
+        return NodeStatus(False, f"Could not read the Node.js version from {done.stdout.strip()!r}.")
+    text = ".".join(map(str, version))
+    if version[0] < MIN_NODE_MAJOR:
+        return NodeStatus(False, f"Node.js {text} is too old; version {MIN_NODE_MAJOR} or later is needed.", text)
+    return NodeStatus(True, f"Node.js {text}", text)
+
+
 def check_sign_in(timeout: float = 60) -> SignInStatus:
     """Run `claude auth status --json`. Blocking; call it off the UI thread."""
     command = find_claude()

@@ -74,22 +74,28 @@ class _WindowBar(QWidget):
 
 
 class _SignInChecker(QObject):
-    done = Signal(object)  # SignInStatus
+    done = Signal(object, object)  # SignInStatus, NodeStatus
 
     def run(self) -> None:
-        threading.Thread(target=lambda: self.done.emit(claude_launcher.check_sign_in()), daemon=True).start()
+        def check() -> None:
+            self.done.emit(claude_launcher.check_sign_in(), claude_launcher.check_node())
+        threading.Thread(target=check, daemon=True).start()
 
 
 class TopBar(QWidget):
     """Shows whether runs are allowed (Claude Code signed in) and the plan usage."""
 
-    sign_in_changed = Signal(bool)
+    sign_in_changed = Signal(bool)  # runs possible: Claude Code signed in and Node.js present
+    setup_checked = Signal(object, object)  # SignInStatus, NodeStatus
     close_all_requested = Signal()
 
     def __init__(self, usage_path: Path, parent=None) -> None:
         super().__init__(parent)
         self.usage_path = usage_path
         self.signed_in = False
+        self.node_ok = True  # until the check says otherwise
+        self.claude_status: claude_launcher.SignInStatus | None = None
+        self.node_status: claude_launcher.NodeStatus | None = None
 
         self.dot = QLabel("●")
         self.dot.setStyleSheet(f"color: {GREY}; font-size: 12pt;")
@@ -143,16 +149,29 @@ class TopBar(QWidget):
         self.dot.setStyleSheet(f"color: {GREY}; font-size: 12pt;")
         self._checker.run()
 
-    def _on_sign_in(self, status: claude_launcher.SignInStatus) -> None:
+    def _on_sign_in(self, status: claude_launcher.SignInStatus,
+                    node: claude_launcher.NodeStatus | None = None) -> None:
         self.signed_in = status.ok
+        self.node_ok = node is None or node.ok
+        self.claude_status, self.node_status = status, node
+        ready = status.ok and self.node_ok
         # Short text in the bar; the full message on hover.
-        self.claude_label.setText("Claude Code signed in" if status.ok else "Runs blocked: Claude Code not ready")
-        self.claude_label.setStyleSheet("" if status.ok else f"color: {RED}; font-weight: bold;")
-        self.dot.setStyleSheet(f"color: {GREEN if status.ok else RED}; font-size: 12pt;")
+        if not status.ok:
+            text = "Runs blocked: Claude Code not ready"
+        elif not self.node_ok:
+            text = "Runs blocked: Node.js missing"
+        else:
+            text = "Claude Code signed in"
+        self.claude_label.setText(text)
+        self.claude_label.setStyleSheet("" if ready else f"color: {RED}; font-weight: bold;")
+        self.dot.setStyleSheet(f"color: {GREEN if ready else RED}; font-size: 12pt;")
+        tip = status.message + (f"\n{node.message}" if node is not None else "")
         for widget in (self.dot, self.claude_label):
-            widget.setToolTip(status.message)
-        self.check_button.setVisible(not status.ok)
-        self.sign_in_changed.emit(status.ok)
+            widget.setToolTip(tip)
+        self.check_button.setVisible(not ready)
+        self.sign_in_changed.emit(ready)
+        if node is not None:
+            self.setup_checked.emit(status, node)
 
     def refresh_usage(self, now: float | None = None) -> None:
         if self.usage_path.exists() and str(self.usage_path) not in self.watcher.files():
