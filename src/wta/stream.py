@@ -36,6 +36,7 @@ class ParsedLine:
     rate_limit: dict | None = None  # the raw rate_limit_info object
     summary: RunSummary | None = None
     init_tools: list[str] | None = None
+    model: str | None = None  # the model Claude Code actually uses, from the init message
     session_id: str | None = None
 
 
@@ -79,6 +80,7 @@ def parse_line(line: str) -> ParsedLine:
 
     if kind == "system" and message.get("subtype") == "init":
         out.init_tools = list(message.get("tools") or [])
+        out.model = message.get("model") if isinstance(message.get("model"), str) else None
     elif kind == "assistant":
         for block in message.get("message", {}).get("content", []):
             if block.get("type") == "text" and block.get("text", "").strip():

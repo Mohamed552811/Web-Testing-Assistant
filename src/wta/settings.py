@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
@@ -23,6 +24,20 @@ EXPORT_FORMATS = {
     "md": "Markdown summary + bug reports (folder)",
 }
 
+# Models: "" means Claude Code's own default; otherwise an alias or full model name for `claude --model`.
+DEFAULT_MODEL = ""
+MODEL_CHOICES = {DEFAULT_MODEL: "Claude Code default", "sonnet": "Sonnet", "opus": "Opus", "haiku": "Haiku"}
+_MODEL_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._\[\]-]{0,63}")
+
+# Pause the batch before the next scenario once the 5-hour window passes this percentage (0 = never).
+PAUSE_OFF = 0
+PAUSE_RANGE = (50, 100)
+
+
+def clean_model(value) -> str:
+    value = value.strip() if isinstance(value, str) else ""
+    return value if value == DEFAULT_MODEL or _MODEL_NAME.fullmatch(value) else DEFAULT_MODEL
+
 
 @dataclass
 class Settings:
@@ -34,6 +49,11 @@ class Settings:
     tester_name: str = ""
     # "system" (follow Windows), "light" or "dark".
     theme: str = "system"
+    # Cost control (decided 2026-10-18): pause at 80% of the 5-hour window; Sonnet for smoke tests,
+    # Claude Code's default model for scenarios.
+    pause_at_percent: int = 80
+    scenario_model: str = DEFAULT_MODEL
+    smoke_model: str = "sonnet"
 
     def cleaned(self) -> "Settings":
         """Unknown values fall back to the defaults."""
@@ -45,6 +65,11 @@ class Settings:
             confirm_risky_actions=bool(self.confirm_risky_actions),
             tester_name=self.tester_name.strip()[:100],
             theme=self.theme if self.theme in ("system", "light", "dark") else default.theme,
+            pause_at_percent=(self.pause_at_percent if self.pause_at_percent == PAUSE_OFF
+                              or PAUSE_RANGE[0] <= self.pause_at_percent <= PAUSE_RANGE[1]
+                              else default.pause_at_percent),
+            scenario_model=clean_model(self.scenario_model),
+            smoke_model=clean_model(self.smoke_model),
         )
 
 

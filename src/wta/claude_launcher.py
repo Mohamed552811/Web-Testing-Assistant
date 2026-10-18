@@ -114,12 +114,13 @@ def resume_command(run_dir: Path, session_id: str) -> str:
                             cwd=run_dir)
 
 
-def run_args(mcp_config: Path, resume_session: str | None = None) -> list[str]:
+def run_args(mcp_config: Path, resume_session: str | None = None, model: str = "") -> list[str]:
     """Arguments (after the executable) for a test run. The prompt is written to stdin,
     so the test account never appears on a command line. `resume_session` continues an
-    earlier run (used after the user answers a confirmation request)."""
+    earlier run (used after the user answers a confirmation request). `model` is an alias
+    such as "sonnet" or a full model name; empty means Claude Code's own default."""
     resume = ["--resume", resume_session] if resume_session else []
-    return resume + [
+    return resume + (["--model", model] if model else []) + [
         "-p",
         "--output-format", "stream-json",
         "--verbose",

@@ -8,11 +8,12 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QLabel,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
-from wta.settings import EXPORT_FORMATS, SCREENSHOT_TIMINGS, Settings
+from wta.settings import EXPORT_FORMATS, MODEL_CHOICES, PAUSE_OFF, PAUSE_RANGE, SCREENSHOT_TIMINGS, Settings
 from wta.theme import THEMES
 
 
@@ -33,6 +34,15 @@ class SettingsDialog(QDialog):
             "Deleting, sending, paying or other irreversible actions. Claude stops and the app asks you."
         )
 
+        self.pause_at = QSpinBox()
+        self.pause_at.setRange(PAUSE_RANGE[0] - 1, PAUSE_RANGE[1])
+        self.pause_at.setSpecialValueText("Never")  # shown at the lowest value, saved as "off"
+        self.pause_at.setSuffix(" % of the 5-hour window")
+        self.pause_at.setToolTip("Before each scenario, the batch pauses and asks you once your 5-hour plan usage "
+                                 "has reached this level. A scenario that is already running is not interrupted.")
+        self.scenario_model = self._model_combo()
+        self.smoke_model = self._model_combo()
+
         self.tester_name = QLineEdit(placeholderText="e.g. Staff QA")
         self.theme = QComboBox()
         for key, label in THEMES.items():
@@ -43,7 +53,12 @@ class SettingsDialog(QDialog):
         form.addRow("Screenshot timing", self.screenshot_timing)
         form.addRow("Export format", self.export_format)
         form.addRow("Risky actions", self.confirm_risky)
-        note = QLabel("Screenshot timing and risky-action confirmation apply from the next run.")
+        form.addRow("Pause batch at", self.pause_at)
+        form.addRow("Model for scenarios", self.scenario_model)
+        form.addRow("Model for smoke tests", self.smoke_model)
+        note = QLabel("Screenshot timing, risky-action confirmation and models apply from the next run. "
+                      "You can also type a full model name.")
+        note.setWordWrap(True)
         note.setStyleSheet("color: gray;")
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
@@ -59,6 +74,31 @@ class SettingsDialog(QDialog):
         self.confirm_risky.setChecked(settings.confirm_risky_actions)
         self.tester_name.setText(settings.tester_name)
         self.theme.setCurrentIndex(max(0, self.theme.findData(settings.theme)))
+        self.pause_at.setValue(self.pause_at.minimum() if settings.pause_at_percent == PAUSE_OFF
+                               else settings.pause_at_percent)
+        self._set_model(self.scenario_model, settings.scenario_model)
+        self._set_model(self.smoke_model, settings.smoke_model)
+
+    @staticmethod
+    def _model_combo() -> QComboBox:
+        combo = QComboBox()
+        combo.setEditable(True)  # a full model name can be typed too
+        for key, label in MODEL_CHOICES.items():
+            combo.addItem(label, key)
+        return combo
+
+    @staticmethod
+    def _set_model(combo: QComboBox, model: str) -> None:
+        index = combo.findData(model)
+        if index >= 0:
+            combo.setCurrentIndex(index)
+        else:
+            combo.setEditText(model)
+
+    @staticmethod
+    def _model(combo: QComboBox) -> str:
+        index = combo.findText(combo.currentText())
+        return combo.itemData(index) if index >= 0 else combo.currentText().strip()
 
     def settings(self) -> Settings:
         return Settings(
@@ -67,4 +107,7 @@ class SettingsDialog(QDialog):
             confirm_risky_actions=self.confirm_risky.isChecked(),
             tester_name=self.tester_name.text(),
             theme=self.theme.currentData(),
+            pause_at_percent=PAUSE_OFF if self.pause_at.value() == self.pause_at.minimum() else self.pause_at.value(),
+            scenario_model=self._model(self.scenario_model),
+            smoke_model=self._model(self.smoke_model),
         ).cleaned()

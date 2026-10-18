@@ -32,7 +32,9 @@ def result(text="Done."):
          "result": text, "usage": {"input_tokens": 1, "output_tokens": 1}, "session_id": "fake-session"})
 
 
-out({"type": "system", "subtype": "init", "tools": ["Write"], "session_id": "fake-session"})
+# Like Claude Code, report the model in use: the one asked for with --model, or a default.
+model = sys.argv[sys.argv.index("--model") + 1] if "--model" in sys.argv else "fake-default-model"
+out({"type": "system", "subtype": "init", "tools": ["Write"], "session_id": "fake-session", "model": model})
 
 if os.environ.get("CLAUDE_CONFIG_DIR"):
     # Save the conversation the way Claude Code does: projects/<cwd with non-alphanumerics as "-">/<id>.jsonl
