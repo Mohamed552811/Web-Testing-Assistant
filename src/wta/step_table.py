@@ -37,7 +37,7 @@ COLUMNS = (
     "Claude reasoning",
     "Review comment",
 )
-COLUMN_WIDTHS = (34, 85, 125, 110, 110, 160, 130, 130, 220, 160)
+COLUMN_WIDTHS = (34, 105, 130, 110, 110, 160, 130, 130, 220, 160)
 COL_CLAUDE_STATUS = COLUMNS.index("Claude status")
 COL_FINAL_STATUS = COLUMNS.index("Final status")
 

@@ -5,7 +5,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import QObject, QSettings, QSize, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QKeySequence
 from PySide6.QtWebEngineCore import QWebEngineProfile, qWebEngineChromiumVersion
 from PySide6.QtWidgets import (
@@ -15,14 +15,17 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QSplitter,
+    QStackedWidget,
     QTabWidget,
+    QToolBar,
     QVBoxLayout,
     QWidget,
 )
 
 from wta import __version__
-from wta import cdp
+from wta import cdp, icons, theme
 from wta import settings as app_settings
+from wta.welcome import AboutDialog, WelcomePage
 from wta.browser import BrowserPane, make_profile
 from wta.connection_dialog import ConnectionDialog
 from wta.domain_guard import NavigationGuard
@@ -50,7 +53,9 @@ START_PAGE = "about:blank"
 USAGE_FILE = "usage.json"
 PROCESSES_FILE = "processes.json"
 SETTINGS_FILE = "settings.json"
+UI_STATE_FILE = "ui-state.ini"
 CDP_CHECK_ATTEMPTS = 4
+APP_USER_MODEL_ID = "WebTestingAssistant.App"
 
 
 class _CdpChecker(QObject):
@@ -113,10 +118,21 @@ class MainWindow(QMainWindow):
         self.runs_tab = RunsTab(db, self)
         self.tabs.addTab(self.runs_tab, "Runs")
 
+        # Left side: the welcome screen until a session is open, then the browser.
+        self.welcome = WelcomePage(self)
+        self.welcome.new_requested.connect(self.new_session)
+        self.welcome.open_requested.connect(self.open_session)
+        self.welcome.session_chosen.connect(self.open_session_by_id)
+        self.left = QStackedWidget()
+        self.left.addWidget(self.welcome)
+        self.left.addWidget(self.browser)
+        self.welcome.set_sessions(store.list_sessions(db))
+
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(self.browser)
+        splitter.addWidget(self.left)
         splitter.addWidget(self.tabs)
         splitter.setSizes([850, 750])
+        self.splitter = splitter
 
         central = QWidget()
         layout = QVBoxLayout(central)
@@ -127,8 +143,11 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
         self._build_menu()
+        self._build_toolbar()
+        self._apply_button_icons()
         self._update_title()
         self._update_run_state()
+        self._restore_ui_state()
         if cdp_port is not None:
             QTimer.singleShot(1000, self._check_cdp)
         if check_sign_in:
@@ -163,16 +182,112 @@ class MainWindow(QMainWindow):
         self.connection_action = QAction("&Claude connection…", self, enabled=self.cdp_port is not None)
         self.connection_action.triggered.connect(self.show_connection)
         browser_menu.addAction(self.connection_action)
-        close_all = QAction("Close &all browsers", self)
-        close_all.triggered.connect(self.close_all_browsers)
-        browser_menu.addAction(close_all)
+        self.close_all_action = QAction("Close &all browsers", self)
+        self.close_all_action.triggered.connect(self.close_all_browsers)
+        browser_menu.addAction(self.close_all_action)
+
+        self.run_action = QAction("&Run batch", self, shortcut=QKeySequence("F5"))
+        self.run_action.setToolTip("Run the batch on the Scenarios or Smoke test tab (F5)")
+        self.run_action.triggered.connect(self.run_current_tab)
+        self.stop_action = QAction("&Stop", self, shortcut=QKeySequence("Shift+F5"), enabled=False)
+        self.stop_action.triggered.connect(self.stop_run)
+
+        help_menu = self.menuBar().addMenu("&Help")
+        about = QAction("&About Web Testing Assistant", self)
+        about.triggered.connect(lambda: AboutDialog(self).exec())
+        help_menu.addAction(about)
+        icons.set_icon(about, "info")
+
+    def _build_toolbar(self) -> None:
+        toolbar = QToolBar("Main", self)
+        toolbar.setObjectName("main-toolbar")
+        toolbar.setMovable(False)
+        toolbar.setIconSize(QSize(18, 18))
+        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        for action, name in ((self.new_action, "file-plus"), (self.open_action, "folder-open"),
+                             (self.run_action, "play"), (self.stop_action, "square"),
+                             (self.export_action, "download"), (self.settings_action, "settings"),
+                             (self.close_all_action, "circle-x")):
+            icons.set_icon(action, name, "accent" if action is self.run_action else None)
+        toolbar.addActions([self.new_action, self.open_action])
+        toolbar.addSeparator()
+        toolbar.addActions([self.run_action, self.stop_action])
+        toolbar.addSeparator()
+        toolbar.addActions([self.export_action, self.settings_action])
+        toolbar.addSeparator()
+        toolbar.addAction(self.close_all_action)
+        self.addToolBar(toolbar)
+        self.toolbar = toolbar
+
+    def _apply_button_icons(self) -> None:
+        """Icons on the buttons inside the tabs and panels (re-tinted with the theme)."""
+        b = self.browser
+        for button, name in ((b.back_button, "arrow-left"), (b.forward_button, "arrow-right"),
+                             (b.reload_button, "rotate-cw")):
+            button.setText("")
+            icons.set_icon(button, name)
+        for tab in self.review_tabs:
+            tab.run_button.setProperty("primary", True)
+            for button, name, role in ((tab.run_button, "play", "on-accent"), (tab.new_batch_button, "plus", None),
+                                       (tab.add_scenario_button, "plus", None), (tab.edit_scenario_button, "pencil", None),
+                                       (tab.remove_scenario_button, "trash-2", None), (tab.add_step_button, "plus", None),
+                                       (tab.edit_step_button, "pencil", None), (tab.delete_step_button, "trash-2", None),
+                                       (tab.approve_button, "check", None), (tab.override_button, "pencil", None),
+                                       (tab.rerun_button, "rotate-ccw", None)):
+                icons.set_icon(button, name, role)
+        icons.set_icon(self.run_panel.stop_button, "square", "on-accent")
+        icons.set_icon(self.runs_tab.open_folder_button, "folder")
+        icons.set_icon(self.runs_tab.copy_resume_button, "copy")
+        icons.set_icon(self.runs_tab.refresh_button, "rotate-cw")
+        # Close all browsers now lives in the toolbar; the top bar keeps only status and usage.
+        self.top_bar.close_all_button.hide()
+
+    def run_current_tab(self) -> None:
+        """Toolbar Run: the batch on the Scenarios or Smoke test tab, whichever is showing (Scenarios otherwise)."""
+        tab = self.tabs.currentWidget()
+        if tab not in self.review_tabs:
+            tab = self.scenario_tab
+            self.tabs.setCurrentWidget(tab)
+        if tab.run_button.isEnabled():
+            tab.run_button.click()
+
+    def open_session_by_id(self, session_id: int) -> None:
+        try:
+            self.show_session(store.load_session(self.db, session_id))
+        except LookupError as exc:
+            QMessageBox.warning(self, "Open session", str(exc))
+
+    # --- remembered layout ---------------------------------------------------------
+
+    def _ui_state(self) -> QSettings:
+        return QSettings(str(self.app_dir / UI_STATE_FILE), QSettings.Format.IniFormat)
+
+    def _restore_ui_state(self) -> None:
+        state = self._ui_state()
+        if state.value("geometry") is not None:
+            self.restoreGeometry(state.value("geometry"))
+        if state.value("splitter") is not None:
+            self.splitter.restoreState(state.value("splitter"))
+        tab = state.value("tab")
+        if tab is not None and 0 <= int(tab) < self.tabs.count():
+            self.tabs.setCurrentIndex(int(tab))
+
+    def _save_ui_state(self) -> None:
+        state = self._ui_state()
+        state.setValue("geometry", self.saveGeometry())
+        state.setValue("splitter", self.splitter.saveState())
+        state.setValue("tab", self.tabs.currentIndex())
+        state.sync()
 
     def edit_settings(self) -> None:
         dialog = SettingsDialog(self.settings, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
+        theme_changed = dialog.settings().theme != self.settings.theme
         self.settings = dialog.settings()
         app_settings.save(self.app_dir / SETTINGS_FILE, self.settings)
+        if theme_changed and QApplication.instance() is not None:
+            theme.apply(QApplication.instance(), self.settings.theme)
         self.statusBar().showMessage("Settings saved.", 5000)
 
     def export_report(self, path: Path | None = None) -> Path | None:
@@ -284,6 +399,7 @@ class MainWindow(QMainWindow):
         for tab in self.review_tabs:
             tab.set_session(session.id)
         self.runs_tab.set_session(session.id, site_notes.site_for_url(session.target_url))
+        self.left.setCurrentWidget(self.browser)
         self.browser.set_viewport(session.viewport_width, session.viewport_height)
         self.browser.view.load(QUrl(session.target_url))
         self.statusBar().showMessage(f"Opened session “{session.name}”")
@@ -314,6 +430,9 @@ class MainWindow(QMainWindow):
         self.open_action.setEnabled(not running)
         self.details_action.setEnabled(not running and self.current_session is not None)
         self.export_action.setEnabled(self.current_session is not None)
+        self.run_action.setEnabled(not running and not blocker)
+        self.run_action.setToolTip(blocker or "Run the batch on the Scenarios or Smoke test tab (F5)")
+        self.stop_action.setEnabled(running)
 
     def _site_notes_for(self, url: str) -> list[str]:
         return [n.note for n in site_notes.list_notes(self.db, site_notes.site_for_url(url))]
@@ -453,14 +572,30 @@ class MainWindow(QMainWindow):
                 return
             self.batch_run.stop()
         self.registry.kill_all()  # on exit, close everything the app started
+        self._save_ui_state()
         super().closeEvent(event)
+
+
+def _set_windows_app_id() -> None:
+    """Give the process its own taskbar identity, so Windows groups it under our icon, not python.exe's."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
+        except (AttributeError, OSError):
+            pass
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(argv if argv is not None else sys.argv)
     cdp_port = cdp.find_free_port()
+    _set_windows_app_id()  # before any window: the taskbar then shows our logo, not Python's
     app = QApplication(argv + cdp.enable(cdp_port))  # must happen before QApplication
     app.setApplicationName(APP_TITLE)
+    app.setWindowIcon(icons.logo_icon())
+    theme.apply(app, app_settings.load(data_dir() / SETTINGS_FILE).theme)
+    theme.follow_system(app)
     db = Database(database_path())
     run_store.mark_interrupted_runs(db)  # runs cut off by a crash or kill last time
     # Remove the test password from Claude Code's saved sessions of earlier runs (one-time after
