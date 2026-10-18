@@ -23,9 +23,12 @@ from PySide6.QtWidgets import (
 )
 
 from wta import __version__
-from wta import accessibility, cdp, compare, cost, fixtures, icons, test_data, theme
+from wta import accessibility, cdp, compare, cost, fixtures, housekeeping, icons, test_data, theme
 from wta import settings as app_settings
 from wta.welcome import AboutDialog, WelcomePage
+from wta.housekeeping_dialog import HousekeepingDialog
+from wta.search_dialog import SearchDialog
+from wta.trends_dialog import TrendsDialog
 from wta.browser import BrowserPane, make_profile
 from wta.connection_dialog import ConnectionDialog
 from wta.domain_guard import NavigationGuard
@@ -204,6 +207,17 @@ class MainWindow(QMainWindow):
         self.run_action.triggered.connect(self.run_current_tab)
         self.stop_action = QAction("&Stop", self, shortcut=QKeySequence("Shift+F5"), enabled=False)
         self.stop_action.triggered.connect(self.stop_run)
+
+        tools_menu = self.menuBar().addMenu("&Tools")
+        self.search_action = QAction("&Search everything…", self, shortcut=QKeySequence("Ctrl+Shift+F"))
+        self.search_action.triggered.connect(self.show_search)
+        tools_menu.addAction(self.search_action)
+        self.trends_action = QAction("&Trends…", self)
+        self.trends_action.triggered.connect(self.show_trends)
+        tools_menu.addAction(self.trends_action)
+        self.housekeeping_action = QAction("&Clean up and back up…", self)
+        self.housekeeping_action.triggered.connect(self.show_housekeeping)
+        tools_menu.addAction(self.housekeeping_action)
 
         help_menu = self.menuBar().addMenu("&Help")
         about = QAction("&About Web Testing Assistant", self)
@@ -583,6 +597,38 @@ class MainWindow(QMainWindow):
             self.run_panel.summary.appendPlainText(f"Estimated plan usage for this batch: {estimate.text()}.\n")
         self.batch_run.start()
 
+    def show_search(self) -> None:
+        dialog = SearchDialog(self.db, self)
+        dialog.hit_chosen.connect(self.open_hit)
+        dialog.exec()
+
+    def open_hit(self, hit) -> None:
+        """Open a search result: its session, tab, batch, scenario and step."""
+        if hit.session_id is None:
+            if hit.site:
+                self.tabs.setCurrentWidget(self.runs_tab)
+                self.statusBar().showMessage(f"Site notes for {hit.site} are on the Runs tab of a session on "
+                                             "that site.", 8000)
+            return
+        if self.batch_run is not None and (self.current_session is None or self.current_session.id != hit.session_id):
+            QMessageBox.information(self, "Search", "A test run is in progress. Open other sessions after it ends.")
+            return
+        if self.current_session is None or self.current_session.id != hit.session_id:
+            self.open_session_by_id(hit.session_id)
+        if hit.scenario_id is None:
+            return
+        tab = self.smoke_tab if sc.scenario_kind(self.db, hit.scenario_id) == ScenarioKind.SMOKE else self.scenario_tab
+        self.tabs.setCurrentWidget(tab)
+        tab.show_scenario(hit.scenario_id, hit.step_id)
+
+    def show_trends(self) -> None:
+        site = site_notes.site_for_url(self.current_session.target_url) if self.current_session else ""
+        TrendsDialog(self.db, site, self).exec()
+
+    def show_housekeeping(self) -> None:
+        HousekeepingDialog(self.db, default_runs_dir(self.app_dir), self.app_dir, self).exec()
+        self.runs_tab.refresh()
+
     def suggest_scenarios(self) -> None:
         tab = self.scenario_tab
         if tab.session_id is None:
@@ -796,6 +842,7 @@ def main(argv: list[str] | None = None) -> int:
     app.setWindowIcon(icons.logo_icon())
     theme.apply(app, app_settings.load(data_dir() / SETTINGS_FILE).theme)
     theme.follow_system(app)
+    housekeeping.apply_pending_restore(data_dir(), database_path())  # a restore chosen last time
     db = Database(database_path())
     run_store.mark_interrupted_runs(db)  # runs cut off by a crash or kill last time
     # Remove the test password from Claude Code's saved sessions of earlier runs (one-time after
