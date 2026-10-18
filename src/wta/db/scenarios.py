@@ -1,5 +1,6 @@
 """Batches, scenarios, steps and reviews within a test session."""
 
+import json
 import re
 from dataclasses import dataclass
 
@@ -9,7 +10,10 @@ from sqlalchemy.orm import Session as OrmSession
 from wta.db.database import Database
 from wta.urls import normalize_url
 from wta.db.models import (
+    BUG_PRIORITIES,
+    BUG_SEVERITIES,
     MAX_SCENARIOS_PER_BATCH,
+    Bug,
     Review,
     ReviewDecision,
     Scenario,
@@ -269,13 +273,57 @@ def update_smoke_page(db: Database, scenario_id: int, data: SmokePageInput) -> S
 
 
 def scenario_steps(db: Database, scenario_id: int) -> list[Step]:
-    """Steps in order, with their reviews loaded."""
+    """Steps in order, with their reviews, bugs and screenshots loaded."""
     with db.Session() as orm:
         scenario = _get(orm, Scenario, scenario_id)
         steps = list(scenario.steps)
         for step in steps:
-            step.reviews  # load before the ORM session closes
+            step.reviews, step.bugs, step.screenshots  # load before the ORM session closes
         return steps
+
+
+# --- bugs ----------------------------------------------------------------------
+
+BUG_FIELDS = ("title", "severity", "priority", "repro_steps", "expected", "actual", "report_text")
+
+
+@dataclass
+class BugEdit:
+    title: str
+    severity: str
+    priority: int
+    repro_steps: str = ""
+    expected: str = ""
+    actual: str = ""
+    report_text: str = ""
+
+    def cleaned(self) -> "BugEdit":
+        title = self.title.strip()
+        if not title:
+            raise ValueError("The bug needs a title.")
+        if self.severity not in BUG_SEVERITIES:
+            raise ValueError(f"Severity must be one of: {', '.join(BUG_SEVERITIES)}.")
+        if self.priority not in BUG_PRIORITIES:
+            raise ValueError("Priority must be 1, 2, 3 or 4.")
+        return BugEdit(title[:255], self.severity, self.priority, self.repro_steps.strip(), self.expected.strip(),
+                       self.actual.strip(), self.report_text.strip())
+
+
+def update_bug(db: Database, bug_id: int, edit: BugEdit) -> Bug:
+    """Save the user's version of a bug. Claude's original is kept the first time it is edited."""
+    edit = edit.cleaned()
+    with db.Session.begin() as orm:
+        bug = _get(orm, Bug, bug_id)
+        if bug.claude_original is None:
+            bug.claude_original = json.dumps({f: getattr(bug, f) for f in BUG_FIELDS})
+        for field_name in BUG_FIELDS:
+            setattr(bug, field_name, getattr(edit, field_name))
+    return bug
+
+
+def claude_original(bug: Bug) -> dict | None:
+    """Claude's version of an edited bug, or None if the user has not edited it."""
+    return json.loads(bug.claude_original) if bug.claude_original else None
 
 
 def add_step(db: Database, scenario_id: int, data: StepInput) -> Step:

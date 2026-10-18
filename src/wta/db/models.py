@@ -315,6 +315,8 @@ class Bug(Base):
     expected: Mapped[str] = mapped_column(Text, default="")
     actual: Mapped[str] = mapped_column(Text, default="")
     report_text: Mapped[str] = mapped_column(Text, default="")
+    # Claude's own version (JSON), kept the first time the user edits the bug, so an edit never erases it.
+    claude_original: Mapped[str | None] = mapped_column(Text)
 
     step: Mapped[Step] = relationship(back_populates="bugs")
 
