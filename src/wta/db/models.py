@@ -98,16 +98,37 @@ class TestSession(Base):
     # For the exported summary report.
     application: Mapped[str | None] = mapped_column(String(200))
     test_scope: Mapped[str | None] = mapped_column(Text)  # one item per line
+    # Files Claude may upload; copied into each run folder before the run.
+    fixtures_dir: Mapped[str | None] = mapped_column(Text)
 
     scenarios: Mapped[list["Scenario"]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
         order_by="(Scenario.batch_number, Scenario.position)",
     )
+    # More test accounts (roles) besides the main one above.
+    other_accounts: Mapped[list["TestAccount"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", order_by="TestAccount.id"
+    )
 
     __table_args__ = (
         CheckConstraint("viewport_width > 0 AND viewport_height > 0", name="ck_session_viewport"),
     )
+
+
+class TestAccount(Base):
+    """Another test-environment account of a session, e.g. a role. Stays in this local database."""
+
+    __tablename__ = "test_account"
+    __test__ = False
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("test_session.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(100))
+    email: Mapped[str] = mapped_column(String(320))
+    password: Mapped[str] = mapped_column(Text, default="")
+
+    session: Mapped[TestSession] = relationship(back_populates="other_accounts")
 
 
 class Scenario(Base):
@@ -125,6 +146,8 @@ class Scenario(Base):
     expected_result: Mapped[str | None] = mapped_column(Text)  # what must be true after the steps
     test_data: Mapped[str] = mapped_column(Text, default="")
 
+    # The account this scenario runs as; None = the session's main account.
+    account_id: Mapped[int | None] = mapped_column(ForeignKey("test_account.id", ondelete="SET NULL"))
     session: Mapped[TestSession] = relationship(back_populates="scenarios")
     smoke_page: Mapped["SmokePage | None"] = relationship(
         back_populates="scenario", cascade="all, delete-orphan", uselist=False

@@ -128,7 +128,7 @@ def write_xlsx(report: Report, path: Path) -> Path:
             cell.fill, cell.font = HEADER_FILL, HEADER_FONT
         for info in report.scenarios:
             row += 1
-            for col, value in enumerate((info.batch, info.name, info.numbered_steps(), info.expected_result,
+            for col, value in enumerate((info.batch, info.title, info.numbered_steps(), info.expected_result,
                                          info.test_data), start=1):
                 summary.cell(row=row, column=col, value=value).alignment = WRAP
     summary.column_dimensions["A"].width = 26

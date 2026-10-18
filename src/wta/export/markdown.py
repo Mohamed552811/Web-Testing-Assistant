@@ -188,6 +188,8 @@ def write_markdown(report: Report, path: Path) -> Path:
                 lines += [f"**Expected result:** {info.expected_result}", ""]
             if info.test_data:
                 lines += [f"**Test data:** {info.test_data}", ""]
+            if info.run_as:
+                lines += [f"**Run as:** {info.run_as}", ""]
         lines += [
             "| Test Step | Expected Result | Actual Result | Status |",
             "|-----------|-----------------|---------------|--------|",

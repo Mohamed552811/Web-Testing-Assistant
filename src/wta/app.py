@@ -498,18 +498,25 @@ class MainWindow(QMainWindow):
                 return
 
         runs_dir = default_runs_dir(self.app_dir)
+        passwords = store.session_passwords(session)
+
+        def account(scenario):
+            return store.account_for(session, scenario.account_id)
+
         jobs = [
             ScenarioJob(
                 scenario_id=scenario.id,
                 title=(f"Smoke: {scenario.name}" if scenario.smoke_page else scenario.name),
                 run_dir=run_folder(runs_dir, session.id, batch, scenario.position, smoke=scenario.smoke_page is not None),
                 model=self.settings.smoke_model if scenario.smoke_page else self.settings.scenario_model,
+                secrets=tuple(p for p in passwords if p != account(scenario).password),
                 context=RunContext(
                     session_name=session.name,
                     target_url=session.target_url,
                     allowed_domains=list(session.allowed_domains),
-                    test_account_email=session.test_account_email or "",
-                    test_account_password=session.test_account_password or "",
+                    test_account_email=account(scenario).email,
+                    test_account_password=account(scenario).password,
+                    test_account_role="" if scenario.account_id is None else account(scenario).role,
                     scenario_name=scenario.name,
                     scenario_steps=scenario.test_steps or "",
                     scenario_expected_result=scenario.expected_result or "",

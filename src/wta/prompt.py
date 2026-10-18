@@ -23,6 +23,7 @@ class RunContext:
     smoke: "SmokeContext | None" = None
     screenshot_timing: str = SCREENSHOTS_BUG_BLOCKED
     scenario_expected_result: str = ""
+    test_account_role: str = ""  # e.g. "Sales manager"; empty for the session's main account
 
 
 @dataclass
@@ -148,7 +149,8 @@ def _screenshot_rule(ctx: RunContext) -> str:
 def build_prompt(ctx: RunContext) -> str:
     domains = ", ".join(ctx.allowed_domains) or "(none)"
     account = (
-        f"- Email: {ctx.test_account_email}\n- Password: {ctx.test_account_password}\n"
+        (f"- Role: {ctx.test_account_role} (run this scenario as this user)\n" if ctx.test_account_role else "")
+        + f"- Email: {ctx.test_account_email}\n- Password: {ctx.test_account_password}\n"
         f"{SIGN_IN_REUSE}"
         if ctx.test_account_email
         else "- No test account was given. If a login is needed, mark the step Blocked and add a notice."

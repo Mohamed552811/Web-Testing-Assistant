@@ -53,7 +53,7 @@ def report_html(report: Report, image_width: int = 360) -> str:
         out.append("<h2>Scenarios</h2><table cellspacing='0' width='100%'><tr><th>Batch</th><th>Scenario</th>"
                    "<th>Steps</th><th>Expected result</th><th>Test data</th></tr>")
         for info in report.scenarios:
-            out.append(f"<tr><td>{info.batch}</td><td>{_text(info.name)}</td><td>{_text(info.numbered_steps())}</td>"
+            out.append(f"<tr><td>{info.batch}</td><td>{_text(info.title)}</td><td>{_text(info.numbered_steps())}</td>"
                        f"<td>{_text(info.expected_result)}</td><td>{_text(info.test_data)}</td></tr>")
         out.append("</table>")
 

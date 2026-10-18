@@ -90,6 +90,11 @@ class ScenarioInfo:
     steps: list[str]
     expected_result: str
     test_data: str
+    run_as: str = ""  # the role of another test account; empty for the main account
+
+    @property
+    def title(self) -> str:
+        return f"{self.name} (as {self.run_as})" if self.run_as else self.name
 
     def numbered_steps(self) -> str:
         return "\n".join(f"{i}. {s}" for i, s in enumerate(self.steps, start=1))
@@ -170,7 +175,9 @@ def build_report(db: Database, session_id: int, tester: str = "") -> Report:
         kind = KIND_LABELS[scenario.kind]
         if scenario.kind == ScenarioKind.SCENARIO:
             scenarios.append(ScenarioInfo(kind, scenario.batch_number, scenario.name, step_lines(scenario.test_steps),
-                                          scenario.expected_result or "", scenario.test_data or ""))
+                                          scenario.expected_result or "", scenario.test_data or "",
+                                          "" if scenario.account_id is None
+                                          else store.account_for(session, scenario.account_id).role))
         labels = SMOKE_LABELS if scenario.kind == ScenarioKind.SMOKE else STATUS_LABELS
         counter = counts.setdefault(kind, Counter())
         for step in scenario.steps:
@@ -202,7 +209,8 @@ def build_report(db: Database, session_id: int, tester: str = "") -> Report:
                     step_action=step.action, review_comment=comment,
                 ))
 
-    replacements = [(session.test_account_password, PASSWORD_PLACEHOLDER)] if session.test_account_password else []
+    # Every test password of the session (main and other accounts); account emails may stay.
+    replacements = [(password, PASSWORD_PLACEHOLDER) for password in store.session_passwords(session)]
     _redact_rows(rows + bugs + scenarios, replacements)
 
     runs = run_store.list_runs(db, session_id)

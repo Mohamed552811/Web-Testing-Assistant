@@ -32,8 +32,27 @@ def _buttons(dialog: QDialog) -> QDialogButtonBox:
     return buttons
 
 
-class ScenarioDialog(QDialog):
-    def __init__(self, parent: QWidget | None = None, data: ScenarioInput | None = None) -> None:
+class _RunAs:
+    """A "Run as" list of the session's test accounts, shown only when there is more than one."""
+
+    def _add_run_as(self, form: QFormLayout, accounts, account_id) -> None:
+        self.run_as = QComboBox()
+        for value, label in accounts or [(None, "Main account")]:
+            self.run_as.addItem(label, value)
+        self.run_as.setCurrentIndex(max(0, self.run_as.findData(account_id)))
+        self.run_as.setToolTip("Which test account Claude signs in with for this run")
+        if self.run_as.count() > 1:
+            form.addRow("Run as", self.run_as)
+        else:
+            self.run_as.hide()
+
+    def account_id(self) -> int | None:
+        return self.run_as.currentData()
+
+
+class ScenarioDialog(_RunAs, QDialog):
+    def __init__(self, parent: QWidget | None = None, data: ScenarioInput | None = None,
+                 accounts: list | None = None, account_id: int | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Edit scenario" if data else "New scenario")
         self.setMinimumWidth(520)
@@ -55,6 +74,7 @@ class ScenarioDialog(QDialog):
         form.addRow("Steps", self.steps)
         form.addRow("Expected result", self.expected_result)
         form.addRow("Test data", self.test_data)
+        self._add_run_as(form, accounts, account_id)
         form.addRow("", hint)
 
         layout = QVBoxLayout(self)
@@ -81,10 +101,11 @@ class ScenarioDialog(QDialog):
         return self._result
 
 
-class SmokePageDialog(QDialog):
+class SmokePageDialog(_RunAs, QDialog):
     """Describe one page for a smoke test. Claude writes the checklist from this."""
 
-    def __init__(self, parent: QWidget | None = None, data: SmokePageInput | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, data: SmokePageInput | None = None,
+                 accounts: list | None = None, account_id: int | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Edit smoke-test page" if data else "New smoke-test page")
         self.setMinimumWidth(560)
@@ -102,6 +123,7 @@ class SmokePageDialog(QDialog):
         form.addRow("URL", self.url)
         form.addRow("How to reach it", self.how_to_reach)
         form.addRow("Login needed", self.login_needed)
+        self._add_run_as(form, accounts, account_id)
         form.addRow("Page information", self.page_information)
         form.addRow("Expected elements", self.expected_elements)
 

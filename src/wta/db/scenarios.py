@@ -21,6 +21,7 @@ from wta.db.models import (
     SmokePage,
     Step,
     StepStatus,
+    TestAccount,
     TestSession,
 )
 
@@ -188,6 +189,17 @@ def add_scenario(
         )
         orm.add(scenario)
     return scenario
+
+
+def set_account(db: Database, scenario_id: int, account_id: int | None) -> None:
+    """Which of the session's accounts a scenario (or smoke page) runs as; None = the main account."""
+    with db.Session.begin() as orm:
+        scenario = _get(orm, Scenario, scenario_id)
+        if account_id is not None:
+            account = orm.get(TestAccount, account_id)
+            if account is None or account.session_id != scenario.session_id:
+                raise ValueError("That account does not belong to this session.")
+        scenario.account_id = account_id
 
 
 def update_scenario(db: Database, scenario_id: int, data: ScenarioInput) -> Scenario:

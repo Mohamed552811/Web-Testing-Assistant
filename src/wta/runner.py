@@ -45,6 +45,8 @@ class ScenarioJob:
     context: RunContext
     run_dir: Path
     model: str = ""  # passed to `claude --model`; empty = Claude Code's default
+    # The session's other test passwords: redacted too, although only this run's account is in the prompt.
+    secrets: tuple[str, ...] = ()
 
     @property
     def planned_steps(self) -> int:
@@ -131,7 +133,7 @@ class ScenarioRun(QObject):
         self.cdp_port = cdp_port
         self.usage_path = usage_path
         self.registry = registry
-        self.redact = make_redactor(job.context.test_account_password)
+        self.redact = make_redactor(job.context.test_account_password, *job.secrets)
         self.process: QProcess | None = None
         self.session_id: str | None = None
         self.stopped = False
@@ -382,7 +384,7 @@ class ScenarioRun(QObject):
         if self.run_id is None:
             return
         result = session_files.clean_run(
-            self.job.run_dir, self.session_id, [self.job.context.test_account_password]
+            self.job.run_dir, self.session_id, [p for p in (self.job.context.test_account_password, *self.job.secrets) if p]
         )
         if result.errors:
             self.outcome.problems += [f"Could not clean Claude's saved session: {e}" for e in result.errors]

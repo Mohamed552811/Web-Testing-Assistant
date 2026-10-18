@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from wta import cost
-from wta.db import Database
+from wta.db import Database, store
 from wta.db import scenarios as sc
 from wta.db import site_notes
 from wta.db.models import MAX_SCENARIOS_PER_BATCH, ReviewDecision, Scenario, ScenarioKind, Step, StepStatus
@@ -302,17 +302,21 @@ class ScenarioTab(QWidget):
         scenarios = (
             sc.batch_scenarios(self.db, self.session_id, self.batch, self.kind) if self.session_id is not None else []
         )
+        accounts = dict(self._accounts())
+        multi = len(accounts) > 1
         self.scenario_list.blockSignals(True)
         self.scenario_list.clear()
         for scenario in scenarios:
             page = scenario.smoke_page
             if page is not None:
-                item = QListWidgetItem(f"{scenario.position}. {page.page_name} — {page.url}")
+                item = QListWidgetItem(f"{scenario.position}. {page.page_name} — {page.url}"
+                                       + self._run_as_text(scenario, accounts, multi))
                 item.setToolTip(
                     f"How to reach it: {page.how_to_reach or '—'}\nLogin needed: {'yes' if page.login_needed else 'no'}"
                 )
             else:
-                item = QListWidgetItem(f"{scenario.position}. {scenario.name}")
+                item = QListWidgetItem(f"{scenario.position}. {scenario.name}"
+                                       + self._run_as_text(scenario, accounts, multi))
                 item.setToolTip(
                     f"Steps:\n{scenario.test_steps or '—'}\n\nExpected result: {scenario.expected_result or '—'}"
                     f"\nTest data: {scenario.test_data or '—'}"
@@ -341,8 +345,20 @@ class ScenarioTab(QWidget):
             "Other Claude Code use on your plan at the same time also counts, so treat it as a rough guide."
         )
 
+    def _accounts(self) -> list[tuple[int | None, str]]:
+        return store.account_choices_for(self.db, self.session_id) if self.session_id is not None else []
+
+    @staticmethod
+    def _run_as_text(scenario: Scenario, accounts: dict, multi: bool) -> str:
+        """ " — as Sales manager" when the session has several accounts and this one is not the main one."""
+        if not multi or scenario.account_id is None or scenario.account_id not in accounts:
+            return ""
+        return " — as " + accounts[scenario.account_id].split(" (")[0]
+
     def add_scenario(self) -> None:
-        dialog = SmokePageDialog(self) if self.smoke else ScenarioDialog(self)
+        accounts = self._accounts()
+        dialog = (SmokePageDialog(self, accounts=accounts) if self.smoke
+                  else ScenarioDialog(self, accounts=accounts))
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         try:
@@ -353,6 +369,7 @@ class ScenarioTab(QWidget):
         except sc.BatchFullError as exc:
             QMessageBox.warning(self, f"Add {self.item_name}", str(exc))
             return
+        sc.set_account(self.db, scenario.id, dialog.account_id())
         self._load_scenarios(select_id=scenario.id)
 
     def edit_scenario(self) -> None:
@@ -360,14 +377,18 @@ class ScenarioTab(QWidget):
         if scenario is None:
             return
         if scenario.smoke_page is not None:
-            dialog = SmokePageDialog(self, sc.SmokePageInput.of(scenario.smoke_page))
+            dialog = SmokePageDialog(self, sc.SmokePageInput.of(scenario.smoke_page), accounts=self._accounts(),
+                                     account_id=scenario.account_id)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 sc.update_smoke_page(self.db, scenario.id, dialog.data())
+                sc.set_account(self.db, scenario.id, dialog.account_id())
                 self._load_scenarios(select_id=scenario.id)
             return
-        dialog = ScenarioDialog(self, sc.ScenarioInput.of(scenario))
+        dialog = ScenarioDialog(self, sc.ScenarioInput.of(scenario), accounts=self._accounts(),
+                                account_id=scenario.account_id)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             sc.update_scenario(self.db, scenario.id, dialog.data())
+            sc.set_account(self.db, scenario.id, dialog.account_id())
             self._load_scenarios(select_id=scenario.id)
 
     def remove_scenario(self) -> None:

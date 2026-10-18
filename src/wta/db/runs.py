@@ -8,7 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from wta.db.database import Database
-from wta.db.models import Run, RunOutcomeKind, RunTrace, Scenario, TraceKind, utcnow
+from wta.db import store
+from wta.db.models import Run, RunOutcomeKind, RunTrace, Scenario, TestSession, TraceKind, utcnow
 from wta.session_files import clean_run, find_session_id
 
 
@@ -104,15 +105,16 @@ def clean_saved_sessions(db: Database, projects: Path | None = None) -> tuple[in
     problems: list[str] = []
     with db.Session() as orm:
         pending = [
-            (run.id, run.run_dir, run.claude_session_id, run.scenario.session.test_account_password)
+            (run.id, run.run_dir, run.claude_session_id, store.session_passwords(run.scenario.session))
             for run in orm.scalars(
                 select(Run)
                 .where(Run.transcript_cleaned_at.is_(None), Run.outcome != RunOutcomeKind.RUNNING)
-                .options(selectinload(Run.scenario).selectinload(Scenario.session))
+                .options(selectinload(Run.scenario).selectinload(Scenario.session)
+                         .selectinload(TestSession.other_accounts))
             )
         ]
-    for run_id, run_dir, session_id, password in pending:
-        result = clean_run(run_dir, session_id, [password] if password else [], projects)
+    for run_id, run_dir, session_id, passwords in pending:
+        result = clean_run(run_dir, session_id, passwords, projects)
         problems += result.errors
         if result.done(session_id):
             mark_transcript_cleaned(db, run_id)

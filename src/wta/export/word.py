@@ -68,7 +68,7 @@ def write_docx(report: Report, path: Path) -> Path:
     if report.scenarios:
         doc.add_heading("Scenarios", level=1)
         _table(doc, ("Batch", "Scenario", "Steps", "Expected result", "Test data"), [
-            (info.batch, info.name, info.numbered_steps(), info.expected_result, info.test_data)
+            (info.batch, info.title, info.numbered_steps(), info.expected_result, info.test_data)
             for info in report.scenarios
         ])
 
