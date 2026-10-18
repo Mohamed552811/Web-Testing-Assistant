@@ -15,8 +15,10 @@ from wta.db.models import (
     PageLoad,
     Run,
     RunOutcomeKind,
+    RunStep,
     RunTrace,
     Scenario,
+    StepStatus,
     TestSession,
     TraceKind,
     utcnow,
@@ -212,6 +214,69 @@ def mark_interrupted_runs(db: Database) -> int:
             run.summary = (run.summary + "\n" if run.summary else "") + "The app closed before this run finished."
             run.ended_at = run.ended_at or utcnow()
         return len(runs)
+
+
+STEP_FIELDS = ("order", "screen", "element", "action", "expected", "actual", "status", "reasoning", "page_url")
+
+
+def _status(value) -> StepStatus:
+    text = str(value or "").strip().lower().replace(" ", "_")
+    text = {"bug": "fail", "failed": "fail", "passed": "pass", "notrun": "not_run"}.get(text, text)
+    return StepStatus(text) if text in {s.value for s in StepStatus} else StepStatus.NOT_RUN
+
+
+def save_run_steps(db: Database, run_id: int, steps: list[dict], redact=lambda text: text) -> None:
+    """Keep the steps as this run reported them (results.json keys; "bug" may hold title and severity)."""
+    with db.Session.begin() as orm:
+        orm.query(RunStep).filter_by(run_id=run_id).delete()
+        for position, step in enumerate(steps, start=1):
+            bug = step.get("bug") if isinstance(step.get("bug"), dict) else None
+            try:
+                order = int(step.get("order") or position)
+            except (TypeError, ValueError):
+                order = position
+            orm.add(RunStep(
+                run_id=run_id, order=order, status=_status(step.get("status")),
+                screen_name=redact(str(step.get("screen") or "")), element=redact(str(step.get("element") or "")),
+                action=redact(str(step.get("action") or "")), expected_result=redact(str(step.get("expected") or "")),
+                actual_result=redact(str(step.get("actual") or "")), reasoning=redact(str(step.get("reasoning") or "")),
+                page_url=str(step.get("page_url") or ""),
+                bug_title=redact(str(bug.get("title") or ""))[:255] if bug else None,
+                bug_severity=str(bug.get("severity") or "")[:20] if bug else None,
+            ))
+
+
+def run_steps(db: Database, run_id: int) -> list[RunStep]:
+    with db.Session() as orm:
+        return list(orm.scalars(select(RunStep).where(RunStep.run_id == run_id).order_by(RunStep.order)))
+
+
+def backfill_run_steps(db: Database) -> int:
+    """Once, for runs from before run steps were kept: read them from each run folder's results.json."""
+    with db.Session() as orm:
+        pending = [
+            (run.id, run.run_dir, store.session_passwords(run.scenario.session))
+            for run in orm.scalars(
+                select(Run).where(Run.outcome != RunOutcomeKind.RUNNING, ~Run.steps.any())
+                .options(selectinload(Run.scenario).selectinload(Scenario.session)
+                         .selectinload(TestSession.other_accounts))
+            )
+        ]
+    filled = 0
+    for run_id, run_dir, passwords in pending:
+        steps = run_steps_from_folder(run_dir)
+        if steps:
+            save_run_steps(db, run_id, steps, _redactor(passwords))
+            filled += 1
+    return filled
+
+
+def _redactor(passwords: list[str]):
+    def redact(text: str) -> str:
+        for password in passwords:
+            text = text.replace(password, "[test password]")
+        return text
+    return redact
 
 
 def run_steps_from_folder(run_dir: str | Path) -> list[dict]:

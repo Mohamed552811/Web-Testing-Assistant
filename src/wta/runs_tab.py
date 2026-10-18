@@ -9,6 +9,8 @@ from PySide6.QtGui import QBrush, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -30,7 +32,7 @@ from PySide6.QtWidgets import (
 
 from wta.db import Database
 from wta.db import runs as run_store
-from wta import claude_launcher
+from wta import claude_launcher, compare
 from wta.db import site_notes
 from wta.db.models import PageIssueKind, Run, RunOutcomeKind, ScenarioKind, TraceKind
 from wta.run_panel import KIND_STYLE
@@ -148,6 +150,9 @@ class RunsTab(QWidget):
         self.summary.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.open_folder_button = QPushButton("Open run folder")
         self.copy_resume_button = QPushButton("Copy resume command")
+        self.compare_button = QPushButton("Compare with previous run")
+        self.compare_button.setToolTip("What changed since the previous run of the same test (also in other "
+                                       "sessions, for scenarios added from the library)")
         self.copy_resume_button.setToolTip(
             "Copies a terminal command that reopens this run's Claude Code session, so you can ask Claude about it. "
             "Claude gets no tools there; the test password has been removed from the saved session."
@@ -205,6 +210,7 @@ class RunsTab(QWidget):
         run_buttons = QVBoxLayout()
         run_buttons.addWidget(self.open_folder_button)
         run_buttons.addWidget(self.copy_resume_button)
+        run_buttons.addWidget(self.compare_button)
         run_buttons.addStretch(1)
         head.addLayout(run_buttons)
         detail_layout.addLayout(head)
@@ -227,6 +233,7 @@ class RunsTab(QWidget):
         self.search.textChanged.connect(lambda _t: self._load_trace())
         self.open_folder_button.clicked.connect(self._open_folder)
         self.copy_resume_button.clicked.connect(self.copy_resume_command)
+        self.compare_button.clicked.connect(self.show_comparison)
         self._runs: list[Run] = []
         self.set_session(None, "")
 
@@ -268,6 +275,7 @@ class RunsTab(QWidget):
         run = self._current_run()
         self.open_folder_button.setEnabled(run is not None)
         self.copy_resume_button.setEnabled(run is not None and bool(run.claude_session_id))
+        self.compare_button.setEnabled(run is not None)
         self.session_label.setText(self._session_text(run))
         self.steps_table.setRowCount(0)
         if run is None:
@@ -295,7 +303,9 @@ class RunsTab(QWidget):
             parts.append(f"Claude: {run.summary}")
         self.summary.setText("<br>".join(p.replace("\n", "<br>") for p in parts))
 
-        steps = run_store.run_steps_from_folder(run.run_dir)
+        kept = run_store.run_steps(self.db, run.id)
+        steps = ([{"order": s.order, "status": s.status.value, "action": s.action, "actual": s.actual_result}
+                  for s in kept] or run_store.run_steps_from_folder(run.run_dir))
         self.steps_table.setRowCount(len(steps))
         for row, step in enumerate(steps):
             for column, key in enumerate(("order", "status", "action", "actual")):
@@ -330,6 +340,28 @@ class RunsTab(QWidget):
             return "" if run is None else "Claude session: not recorded"
         cleaned = "test password removed" if run.transcript_cleaned_at else "test password not removed yet"
         return f"Claude session: {run.claude_session_id} ({cleaned})"
+
+    def show_comparison(self) -> None:
+        run = self._current_run()
+        if run is None:
+            return
+        previous, comparison = compare.compare_with_previous(self.db, run.id)
+        if previous is None:
+            QMessageBox.information(self, "Compare runs", "There is no earlier finished run of this test to compare "
+                                    "with. Scenarios added from the library are compared across sessions too.")
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"What changed — {run.scenario.name}")
+        dialog.resize(900, 520)
+        view = QTextBrowser()
+        view.setHtml(compare.comparison_html(previous, comparison, local_time))
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(view)
+        layout.addWidget(buttons)
+        self._comparison_dialog = dialog  # for tests
+        dialog.exec()
 
     def copy_resume_command(self) -> None:
         run = self._current_run()

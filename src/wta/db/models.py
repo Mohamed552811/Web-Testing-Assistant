@@ -116,6 +116,28 @@ class TestSession(Base):
     )
 
 
+class LibraryItem(Base):
+    """A saved scenario or smoke page, to add to any batch in any session (for example on each new build).
+    Smoke pages keep their page fields here; scenarios use name, steps, expected result and test data."""
+
+    __tablename__ = "library_item"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[ScenarioKind] = mapped_column(_enum(ScenarioKind, "library_kind"))
+    name: Mapped[str] = mapped_column(String(200))
+    test_steps: Mapped[str] = mapped_column(Text, default="")
+    expected_result: Mapped[str] = mapped_column(Text, default="")
+    test_data: Mapped[str] = mapped_column(Text, default="")
+    url: Mapped[str] = mapped_column(Text, default="")
+    how_to_reach: Mapped[str] = mapped_column(Text, default="")
+    login_needed: Mapped[bool] = mapped_column(Boolean, default=False)
+    page_information: Mapped[str] = mapped_column(Text, default="")
+    expected_elements: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(String(300), default="")  # e.g. "Imported from cases.xlsx"
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class TestAccount(Base):
     """Another test-environment account of a session, e.g. a role. Stays in this local database."""
 
@@ -148,6 +170,8 @@ class Scenario(Base):
 
     # The account this scenario runs as; None = the session's main account.
     account_id: Mapped[int | None] = mapped_column(ForeignKey("test_account.id", ondelete="SET NULL"))
+    # The library item this scenario was added from (or saved to); links runs of the same test across builds.
+    template_id: Mapped[int | None] = mapped_column(ForeignKey("library_item.id", ondelete="SET NULL"))
     session: Mapped[TestSession] = relationship(back_populates="scenarios")
     smoke_page: Mapped["SmokePage | None"] = relationship(
         back_populates="scenario", cascade="all, delete-orphan", uselist=False
@@ -310,6 +334,9 @@ class Run(Base):
     page_issues: Mapped[list["PageIssue"]] = relationship(
         back_populates="run", cascade="all, delete-orphan", order_by="PageIssue.id"
     )
+    steps: Mapped[list["RunStep"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan", order_by="RunStep.order"
+    )
     page_loads: Mapped[list["PageLoad"]] = relationship(
         back_populates="run", cascade="all, delete-orphan", order_by="PageLoad.id"
     )
@@ -331,6 +358,29 @@ class RunTrace(Base):
 
     scenario: Mapped[Scenario] = relationship(back_populates="traces")
     run: Mapped[Run | None] = relationship(back_populates="traces")
+
+
+class RunStep(Base):
+    """A step exactly as one run reported it. The scenario's steps hold only the latest results
+    (and the reviews); these keep every run's results for history and comparison."""
+
+    __tablename__ = "run_step"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("run.id", ondelete="CASCADE"), index=True)
+    order: Mapped[int] = mapped_column("step_order", Integer)
+    screen_name: Mapped[str] = mapped_column(Text, default="")
+    element: Mapped[str] = mapped_column(Text, default="")
+    action: Mapped[str] = mapped_column(Text, default="")
+    expected_result: Mapped[str] = mapped_column(Text, default="")
+    actual_result: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[StepStatus] = mapped_column(_enum(StepStatus, "run_step_status"))
+    reasoning: Mapped[str] = mapped_column(Text, default="")
+    page_url: Mapped[str] = mapped_column(Text, default="")
+    bug_title: Mapped[str | None] = mapped_column(String(255))
+    bug_severity: Mapped[str | None] = mapped_column(String(20))
+
+    run: Mapped[Run] = relationship(back_populates="steps")
 
 
 class PageIssueKind(enum.StrEnum):

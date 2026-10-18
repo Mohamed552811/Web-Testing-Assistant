@@ -378,8 +378,20 @@ class ScenarioRun(QObject):
         if not (self.job.run_dir / RESULTS_FILE).exists():
             self.outcome.problems.append("Claude did not write results.json")
         self._record_run_end()
+        self._save_run_steps()
         self._clean_saved_session()
         self.finished.emit(self.outcome)
+
+    def _save_run_steps(self) -> None:
+        """Keep this run's steps (redacted), so a later run does not overwrite its history."""
+        if self.run_id is None or self._last_results is None:
+            return
+        steps = [{
+            "order": s.order, "screen": s.screen, "element": s.element, "action": s.action, "expected": s.expected,
+            "actual": s.actual, "status": s.status.value, "reasoning": s.reasoning, "page_url": s.page_url,
+            "bug": {"title": s.bug.title, "severity": s.bug.severity} if s.bug else None,
+        } for s in self._last_results.steps]
+        runs.save_run_steps(self.db, self.run_id, steps, self.redact)
 
     def _clean_saved_session(self) -> None:
         """Remove the test password from Claude Code's saved session of this run.

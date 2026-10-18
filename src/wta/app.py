@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from wta import __version__
-from wta import accessibility, cdp, cost, fixtures, icons, theme
+from wta import accessibility, cdp, compare, cost, fixtures, icons, theme
 from wta import settings as app_settings
 from wta.welcome import AboutDialog, WelcomePage
 from wta.browser import BrowserPane, make_profile
@@ -42,7 +42,7 @@ from wta.paths import data_dir, database_path
 from wta.db.models import ScenarioKind
 from wta.prompt import RunContext, SmokeContext
 from wta.run_panel import RunPanel
-from wta.runs_tab import RunsTab
+from wta.runs_tab import RunsTab, local_time
 from wta.runner import BatchRun, RunOutcome, ScenarioJob, ScenarioRun, default_runs_dir, run_folder
 from wta.scenario_tab import ScenarioTab
 from wta.session_dialogs import OpenSessionDialog, SessionDialog
@@ -109,6 +109,7 @@ class MainWindow(QMainWindow):
         self.page_monitor = PageMonitor(db, self._current_run_id, self)
         self._batch_outcomes: list[RunOutcome] = []
         self._batch_smoke = False
+        self._batch_regressions = 0
 
         self.scenario_tab = ScenarioTab(db, self)
         self.scenario_tab.status_message.connect(self.statusBar().showMessage)
@@ -244,7 +245,9 @@ class MainWindow(QMainWindow):
                                        (tab.edit_step_button, "pencil", None), (tab.delete_step_button, "trash-2", None),
                                        (tab.approve_button, "check", None), (tab.override_button, "pencil", None),
                                        (tab.rerun_button, "rotate-ccw", None),
-                                       (tab.site_note_button, "file-plus", None)):
+                                       (tab.site_note_button, "file-plus", None),
+                                       (tab.from_library_button, "folder-open", None),
+                                       (tab.save_library_button, "download", None)):
                 icons.set_icon(button, name, role)
         icons.set_icon(self.run_panel.stop_button, "square", "on-accent")
         self.browser.banner.icon.setPixmap(icons.icon("bot", "#ffffff").pixmap(20, 20))
@@ -560,6 +563,7 @@ class MainWindow(QMainWindow):
             self.page_monitor.attach(self.cdp_port, self.browser.view.page().devToolsId())
         self.notifier.run_started()
         self._batch_outcomes = []
+        self._batch_regressions = 0
         self._batch_smoke = kind == ScenarioKind.SMOKE
         self.tabs.setCurrentWidget(self.run_panel)
         self._update_run_state()
@@ -678,6 +682,12 @@ class MainWindow(QMainWindow):
             summary = self._page_summary(run_id)
             if summary:
                 self.run_panel.summary.appendPlainText(summary + "\n")
+            previous, comparison = compare.compare_with_previous(self.db, run_id)
+            if comparison is not None:
+                self._batch_regressions += comparison.count(compare.REGRESSION)
+                self.run_panel.summary.appendPlainText(
+                    f"  Since the previous run ({local_time(previous.started_at)}): {comparison.summary()}"
+                    " (Runs tab, Compare with previous run)\n")
             job = next((j for j in self.batch_run.jobs if j.scenario_id == outcome.scenario_id), None)
             if job is not None and job.context.accessibility_checks:
                 self._check_contrast(run_id)
@@ -718,6 +728,8 @@ class MainWindow(QMainWindow):
         message = f"{ran}, {len(steps)} {unit}" + (f": {found}" if found else "") + ". Ready for your review."
         if failed:
             message += f" {failed} ended with an error; see the Live run tab."
+        if self._batch_regressions:
+            message += f" {self._batch_regressions} step(s) failed that passed in the previous run."
         return heading, message
 
     def closeEvent(self, event: QCloseEvent) -> None:
@@ -758,6 +770,7 @@ def main(argv: list[str] | None = None) -> int:
     # Remove the test password from Claude Code's saved sessions of earlier runs (one-time after
     # the update, afterwards only for runs that could not be cleaned when they ended).
     run_store.clean_saved_sessions(db)
+    run_store.backfill_run_steps(db)  # keep the history of runs from before Phase 17
     profile = make_profile(data_dir() / "browser-profile", app)
     guard = NavigationGuard(app)
     profile.setUrlRequestInterceptor(guard)
