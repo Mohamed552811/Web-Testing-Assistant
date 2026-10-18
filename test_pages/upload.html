@@ -18,6 +18,8 @@
 </form>
 <p id="result" role="status"></p>
 <p><a href="print.html" target="_blank">Open the printable invoice in a new tab</a></p>
+<!-- Deliberate accessibility problem: text with too little contrast. -->
+<p style="color:#bbbbbb">Uploaded files are kept for 30 days.</p>
 <script>
   document.getElementById("form").addEventListener("submit", (event) => {
     event.preventDefault();

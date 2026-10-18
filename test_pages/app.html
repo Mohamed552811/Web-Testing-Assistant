@@ -80,8 +80,12 @@
     e.preventDefault();
     const email = document.getElementById("email").value.trim();
     const password = document.getElementById("password").value;
-    if (account && email === account.email && password === account.password) {
+    // The main test account, or one of the other accounts (roles) in test-account.json.
+    const match = account && [account, ...(account.others || [])]
+      .find(a => email === a.email && password === a.password);
+    if (match) {
       state.user = email;
+      state.displayName = match.name || "Sam Tester";
       document.getElementById("login-error").textContent = "";
       location.hash = "#home";
       route();

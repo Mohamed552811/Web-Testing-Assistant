@@ -82,6 +82,8 @@ class EventTests(Fixture):
             ("Network.requestWillBeSent", {"requestId": "4", "request": {"url": "https://shop.test/slow"}}),
             ("Network.loadingFailed", {"requestId": "4", "errorText": "net::ERR_ABORTED"}),  # page moved on
             ("Network.loadingFailed", {"requestId": "5", "errorText": "net::ERR_FAILED", "canceled": True}),
+            ("Network.responseReceived", {"requestId": "6", "response": {"url": "https://shop.test/favicon.ico",
+                                                                         "status": 404}}),  # the browser's own
         )
         self.assertEqual([i.message for i in found.issues], [
             "500 Server Error — POST https://shop.test/api/save",

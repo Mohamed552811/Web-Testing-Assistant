@@ -22,6 +22,11 @@ IGNORED_ERRORS = {"net::ERR_ABORTED"}
 BLOCKED_BY_APP = "net::ERR_BLOCKED_BY_CLIENT"  # the app's allowed-domain guard
 
 
+def _browser_noise(url: str) -> bool:
+    """Requests the browser makes on its own, not the page (a missing favicon is not the app's error)."""
+    return url.split("?")[0].endswith("/favicon.ico")
+
+
 def target_url(port: int, target_id: str) -> str:
     return f"{cdp.endpoint_url(port).replace('http://', 'ws://')}/devtools/page/{target_id}"
 
@@ -102,8 +107,8 @@ class PageMonitor(QObject):
         elif method == "Network.responseReceived":
             response = params.get("response") or {}
             status = int(response.get("status") or 0)
-            if status >= 400:
-                url = response.get("url", "")
+            url = response.get("url", "")
+            if status >= 400 and not _browser_noise(url):
                 verb = self._requests.get(params.get("requestId", ""), ("", "GET"))[1]
                 text = f"{status} {response.get('statusText', '')}".strip() + f" — {verb} {url}"
                 self._issue(runs.IssueRecord(PageIssueKind.REQUEST, text, url, status=status))
@@ -112,7 +117,7 @@ class PageMonitor(QObject):
             if params.get("canceled") or error in IGNORED_ERRORS:
                 return
             url, verb = self._requests.get(params.get("requestId", ""), ("", "GET"))
-            if url.startswith(("data:", "blob:")):
+            if url.startswith(("data:", "blob:")) or _browser_noise(url):
                 return
             reason = "blocked: outside the allowed domains" if error == BLOCKED_BY_APP else error
             if params.get("blockedReason"):

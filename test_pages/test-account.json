@@ -1,4 +1,12 @@
 {
   "email": "qa@wta.test",
-  "password": "Wta-DQ8FkLgOdMfl"
+  "password": "Wta-DQ8FkLgOdMfl",
+  "others": [
+    {
+      "role": "Manager",
+      "email": "manager@wta.test",
+      "password": "mgr-49d7934f",
+      "name": "Morgan Manager"
+    }
+  ]
 }

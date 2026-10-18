@@ -192,10 +192,12 @@ class RunsTab(QWidget):
         self.detail_tabs = QTabWidget()
         self.detail_tabs.addTab(trace_box, "Trace")
         self.detail_tabs.addTab(self.findings, "Errors and speed")
+        self.detail_tabs.setUsesScrollButtons(False)  # titles are short; never hide one behind arrows
+        self.detail_tabs.setMinimumHeight(200)
         inner = QSplitter(Qt.Orientation.Vertical)
         inner.addWidget(steps_box)
         inner.addWidget(self.detail_tabs)
-        inner.setSizes([160, 320])
+        inner.setSizes([120, 380])
         detail_box = QGroupBox("Run details")
         detail_layout = QVBoxLayout(detail_box)
         head = QHBoxLayout()
@@ -215,7 +217,7 @@ class RunsTab(QWidget):
         splitter.addWidget(runs_box)
         splitter.addWidget(detail_box)
         splitter.addWidget(self.notes_panel)
-        splitter.setSizes([170, 480, 170])
+        splitter.setSizes([150, 580, 150])
         layout = QVBoxLayout(self)
         layout.addWidget(splitter)
 
