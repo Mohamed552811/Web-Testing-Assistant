@@ -13,7 +13,7 @@ import sys
 import time
 from pathlib import Path
 
-prompt = sys.stdin.read()
+prompt = sys.stdin.buffer.read().decode("utf-8")  # the app sends UTF-8, as the real Claude Code expects
 mode = os.environ.get("FAKE_CLAUDE_MODE", "")
 password = "pw-secret-9" if "pw-secret-9" in prompt else "missing"
 
@@ -33,6 +33,14 @@ def result(text="Done."):
 
 
 out({"type": "system", "subtype": "init", "tools": ["Write"], "session_id": "fake-session"})
+
+if os.environ.get("CLAUDE_CONFIG_DIR"):
+    # Save the conversation the way Claude Code does: projects/<cwd with non-alphanumerics as "-">/<id>.jsonl
+    import re
+    folder = Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects" / re.sub(r"[^A-Za-z0-9]", "-", os.getcwd())
+    folder.mkdir(parents=True, exist_ok=True)
+    with open(folder / "fake-session.jsonl", "a", encoding="utf-8") as transcript:
+        transcript.write(json.dumps({"type": "user", "sessionId": "fake-session", "message": {"content": prompt}}) + "\n")
 
 if mode == "slow":
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
