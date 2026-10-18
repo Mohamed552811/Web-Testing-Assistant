@@ -33,6 +33,7 @@ from wta.browser import BrowserPane, make_profile
 from wta.connection_dialog import ConnectionDialog
 from wta.domain_guard import NavigationGuard
 from wta.notify import Notifier
+from wta.highlight import Highlighter, highlight_path
 from wta.page_monitor import PageMonitor
 from wta.processes import ProcessRegistry
 from wta.results import ConfirmationRequest
@@ -111,6 +112,7 @@ class MainWindow(QMainWindow):
         self.browser.print_requested.connect(self._print_requested)
         self.notifier = Notifier(self, APP_TITLE)
         self.page_monitor = PageMonitor(db, self._current_run_id, self)
+        self.highlighter = Highlighter(self.browser.view, self.page_monitor, self)
         self._batch_outcomes: list[RunOutcome] = []
         self._batch_smoke = False
         self._batch_regressions = 0
@@ -577,6 +579,7 @@ class MainWindow(QMainWindow):
         self.batch_run.scenario_started.connect(self.run_panel.scenario_started)
         self.batch_run.event.connect(self.run_panel.add_event)
         self.batch_run.progress.connect(self.run_panel.set_progress)
+        self.batch_run.highlight_requested.connect(self._highlight_step)
         for tab in self.review_tabs:
             self.batch_run.results_changed.connect(tab.refresh)
         self.batch_run.usage_changed.connect(lambda _state: self.top_bar.refresh_usage())
@@ -726,6 +729,23 @@ class MainWindow(QMainWindow):
         if self.batch_run is None or run.stopped:
             return  # stopped while the question was open
         run.answer_confirmation(box.clickedButton() is allow)
+
+    def _highlight_step(self, scenario_id: int, order: int, text: str, run_dir) -> None:
+        """Box the failing element of a Bug / Blocked step in the app's own screenshot."""
+        run = self.batch_run.current if self.batch_run is not None else None
+
+        def done(path) -> None:
+            if path is None:
+                if run is not None:
+                    run.add_note(f"App: could not find “{text}” on the page to mark step {order}.")
+                return
+            if sc.add_highlight_screenshot(self.db, scenario_id, order, path):
+                for tab in self.review_tabs:
+                    tab.refresh(scenario_id)
+                if run is not None:
+                    run.add_note(f"App: marked “{text}” for step {order} in {path.name}.")
+
+        self.highlighter.highlight(text, highlight_path(Path(run_dir), order), done)
 
     def _current_run_id(self) -> int | None:
         current = self.batch_run.current if self.batch_run is not None else None

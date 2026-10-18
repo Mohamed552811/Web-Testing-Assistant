@@ -3,6 +3,7 @@
 import json
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
@@ -18,6 +19,7 @@ from wta.db.models import (
     ReviewDecision,
     Scenario,
     ScenarioKind,
+    Screenshot,
     SmokePage,
     Step,
     StepStatus,
@@ -189,6 +191,17 @@ def add_scenario(
         )
         orm.add(scenario)
     return scenario
+
+
+def add_highlight_screenshot(db: Database, scenario_id: int, order: int, path: Path) -> bool:
+    """Attach the app's marked screenshot to a step (first in its list). False if the step is gone."""
+    with db.Session.begin() as orm:
+        step = orm.scalars(select(Step).where(Step.scenario_id == scenario_id, Step.order == order)).first()
+        if step is None:
+            return False
+        step.screenshots[:] = [Screenshot(file_path=str(path))] + [s for s in step.screenshots
+                                                                  if s.file_path != str(path)]
+    return True
 
 
 def scenario_batch(db: Database, scenario_id: int) -> int | None:

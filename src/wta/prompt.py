@@ -204,6 +204,8 @@ def build_prompt(ctx: RunContext) -> str:
 - "reasoning": a short written explanation of what you saw and why you chose the status.
 - "page_url": the page URL after the step. "console_errors" / "failed_requests": fill them in when the tool output reports errors, or on fail and blocked steps (use the console and network tools then). Otherwise leave them empty.
 {_screenshot_rule(ctx)}
+- For "fail" and "blocked" steps, set "highlight" to the exact visible text or accessible name of the element
+  that is wrong (as shown in the snapshot), so the app can mark it with a box in a screenshot. Otherwise null.
 - Screenshots are evidence for the user, not a way to look at the page: use snapshots to see the page, and never take any other screenshots.
 - Every "fail" step needs a "bug" object (fields follow Azure DevOps / TFS Bug work items; severity is one of "1 - Critical", "2 - High", "3 - Medium", "4 - Low"; priority is 1 to 4). Other steps have "bug": null.
 

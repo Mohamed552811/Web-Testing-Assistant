@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from wta import icons
 from wta.db import scenarios as sc
 from wta.db.models import BUG_PRIORITIES, BUG_SEVERITIES, Bug, Step, StepStatus
+from wta.results import HIGHLIGHT_SUFFIX
 from wta.step_table import effective_status
 
 THUMB_WIDTH = 240
@@ -76,7 +77,8 @@ class ScreenshotCard(QGroupBox):
         self.set_paths([])
 
     def set_paths(self, paths: list[Path], title: str = "Screenshot") -> None:
-        self.paths = [p for p in paths if p.is_file()]
+        # The app's marked copy (box around the failing element) first.
+        self.paths = sorted((p for p in paths if p.is_file()), key=lambda p: not p.name.endswith(HIGHLIGHT_SUFFIX))
         self.title_text = title
         self.setVisible(bool(self.paths))
         if self.paths:
@@ -84,7 +86,8 @@ class ScreenshotCard(QGroupBox):
             self.thumbnail.setPixmap(pixmap.scaledToWidth(min(THUMB_WIDTH, pixmap.width()),
                                                           Qt.TransformationMode.SmoothTransformation))
             extra = len(self.paths) - 1
-            self.more.setText(f"+ {extra} more screenshot(s) in the run folder" if extra else "")
+            marked = "Failing element marked by the app. " if self.paths[0].name.endswith(HIGHLIGHT_SUFFIX) else ""
+            self.more.setText(marked + (f"+ {extra} more screenshot(s) in the run folder" if extra else ""))
 
     def open_viewer(self) -> None:
         if self.paths:

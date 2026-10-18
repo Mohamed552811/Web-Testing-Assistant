@@ -115,6 +115,7 @@ class ScenarioRun(QObject):
     event = Signal(object)  # TraceEvent
     results_changed = Signal(int)  # scenario id
     progress = Signal(int, int)  # steps done, steps in total
+    highlight_requested = Signal(int, int, str, object)  # scenario id, step order, element text, run folder
     usage_changed = Signal(object)  # dict[str, WindowUsage]
     confirmation_needed = Signal(object)  # ConfirmationRequest
     finished = Signal(object)  # RunOutcome
@@ -146,6 +147,7 @@ class ScenarioRun(QObject):
         self._mtime_at_resume = 0.0
         self._last_results: Results | None = None
         self._reported: set[str] = set()
+        self._highlighted: set[tuple[int, str]] = set()
         self._ticks = 0
         self._done = False
         self.outcome = RunOutcome(job.scenario_id, -1, None, usage_at_start=usage.load(usage_path))
@@ -331,6 +333,11 @@ class ScenarioRun(QObject):
             self._report_once(f"Notice from Claude: {notice}")
         self.results_changed.emit(self.job.scenario_id)
         self.progress.emit(*run_progress(results, self.job.planned_steps))
+        for step in results.steps:  # a new Bug or Blocked step that names its element: mark it now
+            key = (step.order, step.highlight)
+            if step.highlight and step.status in (StepStatus.FAIL, StepStatus.BLOCKED) and key not in self._highlighted:
+                self._highlighted.add(key)
+                self.highlight_requested.emit(self.job.scenario_id, step.order, step.highlight, self.job.run_dir)
 
     def _report_once(self, text: str) -> None:
         if text not in self._reported:
@@ -447,6 +454,7 @@ class BatchRun(QObject):
     event = Signal(object)
     results_changed = Signal(int)
     progress = Signal(int, int)  # steps done, steps in total, for the current scenario
+    highlight_requested = Signal(int, int, str, object)
     usage_changed = Signal(object)
     confirmation_needed = Signal(object, object)  # ScenarioRun, ConfirmationRequest
     scenario_finished = Signal(object)  # RunOutcome
@@ -519,6 +527,7 @@ class BatchRun(QObject):
         run.event.connect(self.event)
         run.results_changed.connect(self.results_changed)
         run.progress.connect(self.progress)
+        run.highlight_requested.connect(self.highlight_requested)
         run.usage_changed.connect(self.usage_changed)
         run.confirmation_needed.connect(lambda request, r=run: self.confirmation_needed.emit(r, request))
         run.finished.connect(self._on_finished)

@@ -45,6 +45,7 @@ class PageMonitor(QObject):
         self._navigation: tuple[str, float] | None = None  # main-frame document: (url, start timestamp)
         self._pending: dict[int, tuple[list[runs.IssueRecord], list[tuple[str, int]]]] = {}
         self._next_id = 0
+        self._callbacks: dict[int, Callable[[dict], None]] = {}
         self.socket = QWebSocket()
         self.socket.connected.connect(self._on_connected)
         self.socket.disconnected.connect(self._on_disconnected)
@@ -74,17 +75,26 @@ class PageMonitor(QObject):
         self.connected = False
         self.connected_changed.emit(False)
 
-    def _send(self, method: str, params: dict | None = None) -> None:
+    def _send(self, method: str, params: dict | None = None) -> int:
         self._next_id += 1
         self.socket.sendTextMessage(json.dumps({"id": self._next_id, "method": method, "params": params or {}}))
+        return self._next_id
+
+    def request(self, method: str, params: dict, callback: Callable[[dict], None]) -> None:
+        """Send a DevTools command and call back with its result (an empty dict on error)."""
+        self._callbacks[self._send(method, params)] = callback
 
     def _on_message(self, text: str) -> None:
         try:
             message = json.loads(text)
         except ValueError:
             return
-        if isinstance(message, dict) and "method" in message:
+        if not isinstance(message, dict):
+            return
+        if "method" in message:
             self.handle_event(message["method"], message.get("params") or {})
+        elif message.get("id") in self._callbacks:
+            self._callbacks.pop(message["id"])(message.get("result") or {})
 
     # --- events ------------------------------------------------------------------
 

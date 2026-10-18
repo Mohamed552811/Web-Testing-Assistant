@@ -50,10 +50,12 @@ SCHEMA_EXAMPLE = {
             "failed_requests": [],
             "actions": [{"action": "type", "target": "Email textbox", "outcome": "ok"}],
             "screenshot": None,
+            "highlight": None,
             "bug": None,
         }
     ],
 }
+HIGHLIGHT_SUFFIX = "-highlight.png"  # the app's own screenshot with a box around the failing element
 BUG_EXAMPLE = {
     "title": "Short bug title",
     "severity": "2 - High",
@@ -95,6 +97,7 @@ class StepResult:
     actions: list[dict]
     screenshot: str | None
     bug: BugResult | None
+    highlight: str = ""  # fail/blocked steps: visible text or name of the element that is wrong
 
 
 @dataclass
@@ -192,6 +195,7 @@ def parse_results(data) -> Results:
                 failed_requests=_strings(raw.get("failed_requests")),
                 actions=actions,
                 screenshot=_text(raw.get("screenshot")) or None,
+                highlight=_text(raw.get("highlight"))[:300],
                 bug=_bug(raw.get("bug"), problems, order) if status == StepStatus.FAIL else None,
             )
         )
@@ -314,9 +318,11 @@ def apply_results(
                 problems.append(f"Step {r.order}: screenshot {r.screenshot!r} not found in the run folder")
             if required and not r.screenshot:
                 problems.append(f"Step {r.order} is {r.status.value} but has no screenshot")
+            # The app's highlight screenshots are kept; Claude's own is replaced when it changes.
+            highlights = [s for s in step.screenshots if s.file_path.endswith(HIGHLIGHT_SUFFIX)]
             current = [s for s in step.screenshots if shot is not None and Path(s.file_path) == shot]
-            step.screenshots[:] = current or (
+            step.screenshots[:] = highlights + (current or (
                 [Screenshot(file_path=str(shot), captured_at=datetime.fromtimestamp(shot.stat().st_mtime, UTC).replace(tzinfo=None))]
                 if shot else []
-            )
+            ))
     return problems
