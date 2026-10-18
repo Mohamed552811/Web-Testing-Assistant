@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from wta.db.models import StepStatus
+from wta import test_data
 from wta.db.scenarios import ScenarioInput, SmokePageInput, StepInput
 from wta.step_table import STATUS_LABELS
 
@@ -65,7 +66,8 @@ class ScenarioDialog(_RunAs, QDialog):
         self.expected_result = _text_box(
             "What must be true after the last step, e.g. the exchange rate shows 1 JOD = 4.30 AED", 70)
         self.test_data = _text_box("Values to use, e.g. product name, quantity, coupon code")
-        hint = QLabel("Claude follows the steps in order and judges Pass or Fail against the expected result.")
+        hint = QLabel("Claude follows the steps in order and judges Pass or Fail against the expected result. "
+                      + test_data.HELP)
         hint.setWordWrap(True)
         hint.setStyleSheet("color: gray;")
 
@@ -90,6 +92,11 @@ class ScenarioDialog(_RunAs, QDialog):
     def accept(self) -> None:
         data = ScenarioInput(self.name.text(), self.steps.toPlainText(), self.expected_result.toPlainText(),
                              self.test_data.toPlainText())
+        unknown = test_data.used_variables(data.steps, data.expected_result, data.test_data) - set(test_data.GENERATORS)
+        if unknown:
+            QMessageBox.warning(self, "Check the scenario", "Unknown variable(s): "
+                                + ", ".join("{{" + name + "}}" for name in sorted(unknown)) + "\n\n" + test_data.HELP)
+            return
         try:
             self._result = data.cleaned()
         except ValueError as exc:

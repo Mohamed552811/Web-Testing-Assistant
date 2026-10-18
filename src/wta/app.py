@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from wta import __version__
-from wta import accessibility, cdp, compare, cost, fixtures, icons, theme
+from wta import accessibility, cdp, compare, cost, fixtures, icons, test_data, theme
 from wta import settings as app_settings
 from wta.welcome import AboutDialog, WelcomePage
 from wta.browser import BrowserPane, make_profile
@@ -512,6 +512,14 @@ class MainWindow(QMainWindow):
         def account(scenario):
             return store.account_for(session, scenario.account_id)
 
+        # {{variables}}: fresh values for each scenario's run, the same everywhere within it.
+        fillers = {scenario.id: test_data.Filler() for scenario, _rerun in selected}
+
+        def smoke_context(scenario):
+            page = vars(sc.SmokePageInput.of(scenario.smoke_page))
+            fill = fillers[scenario.id].fill
+            return SmokeContext(**{k: fill(v) if isinstance(v, str) and k != "url" else v for k, v in page.items()})
+
         jobs = [
             ScenarioJob(
                 scenario_id=scenario.id,
@@ -530,13 +538,14 @@ class MainWindow(QMainWindow):
                     fixture_files=fixture_files,
                     accessibility_checks=bool(scenario.smoke_page) and self.settings.smoke_accessibility,
                     scenario_name=scenario.name,
-                    scenario_steps=scenario.test_steps or "",
-                    scenario_expected_result=scenario.expected_result or "",
-                    scenario_test_data=scenario.test_data,
+                    scenario_steps=fillers[scenario.id].fill(scenario.test_steps or ""),
+                    scenario_expected_result=fillers[scenario.id].fill(scenario.expected_result or ""),
+                    scenario_test_data=fillers[scenario.id].fill(scenario.test_data),
+                    test_data_values=fillers[scenario.id].values,
                     site_notes=self._site_notes_for(scenario.smoke_page.url if scenario.smoke_page else session.target_url),
                     confirm_risky_actions=self.settings.confirm_risky_actions,
                     screenshot_timing=self.settings.screenshot_timing,
-                    smoke=SmokeContext(**vars(sc.SmokePageInput.of(scenario.smoke_page))) if scenario.smoke_page else None,
+                    smoke=smoke_context(scenario) if scenario.smoke_page else None,
                 ),
             )
             for scenario, _rerun in selected

@@ -173,6 +173,9 @@ class ScenarioRun(QObject):
             site_notes_used=len(self.job.context.site_notes),
         )
         self._emit(TraceKind.NOTE, f"Starting Claude Code in {run_dir}")
+        if self.job.context.test_data_values:
+            self._emit(TraceKind.NOTE, "Test data for this run: " + ", ".join(
+                f"{name} = {value}" for name, value in self.job.context.test_data_values.items()))
         if self.job.context.site_notes:
             self._emit(TraceKind.NOTE, f"Using {len(self.job.context.site_notes)} site note(s): "
                        + " | ".join(self.job.context.site_notes))

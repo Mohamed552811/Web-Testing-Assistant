@@ -26,6 +26,7 @@ class RunContext:
     test_account_role: str = ""  # e.g. "Sales manager"; empty for the session's main account
     fixture_files: list[str] = field(default_factory=list)  # under fixtures/ in the run folder
     accessibility_checks: bool = False  # smoke tests: add accessibility checks to the checklist
+    test_data_values: dict[str, str] = field(default_factory=dict)  # {{variables}} filled in for this run
 
 
 @dataclass
