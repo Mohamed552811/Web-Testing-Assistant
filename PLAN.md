@@ -105,3 +105,11 @@ From Phase 13 (2026-10-18):
 - The last open session is reopened by `main()` after the window is shown, not when the window is built, so tests start on the welcome screen. If the session was deleted, the welcome screen stays.
 - Screenshot paths are stored as absolute paths; if the file is gone, the screenshot card is hidden.
 - Checked on a copy of the Phase 8 smoke data (15 checks: 10 Pass, 4 Bug, 1 Blocked, 1 to review) in light and dark themes.
+
+From Phase 14 (2026-10-18):
+- Progress comes from results.json, which Claude rewrites after every step: a step is done once its status is not "not_run". The total is the larger of the steps in the file and the steps known in advance (given steps, plus 1 for the expected-result check). Smoke tests show no total until Claude writes its checklist.
+- Notifications use Qt's own tray icon (QSystemTrayIcon), so no new dependency. The icon appears in the notification area from the first run until the app closes; clicking the notification brings the window back. The taskbar button also flashes.
+- The timeline keeps following new lines only while you are at the bottom; scrolling up to read stops it. (The first version called scrollToBottom before Qt had laid out the new line, so it stopped following after the first few lines.)
+- Run-folder paths are shown as file names only ("Write results.json"); the saved trace keeps the full paths.
+- The banner does not block clicks in the page; it only warns.
+- Real run on the local test app: progress went 2 of 5, 4 of 5, all 5 done; timer 1:21; banner shown during the run and hidden after; notification "1 scenario, 5 steps: 4 pass, 1 fail. Ready for your review." The 5-hour usage stood at 91% after this run.

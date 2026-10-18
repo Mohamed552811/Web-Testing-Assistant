@@ -49,7 +49,7 @@ This installs PySide6, SQLAlchemy, openpyxl and python-docx. The first test run 
 1. **Session → New session**: enter the target URL, allowed domains, viewport and a test-environment account.
 2. **Scenarios tab**: add up to 5 scenarios per batch in plain language, then press **Run batch**.
    **Smoke test tab**: describe one page (URL, how to reach it, login needed, what's on it) and Claude writes and runs a checklist.
-3. **Live run tab**: follow each action, what Claude saw and its notes. **Stop** ends the run at once.
+3. **Live run tab**: a timeline of each action, what Claude saw (one line; click to expand) and its notes, with "Step 4 of 5" progress and a timer. **Stop** ends the run at once. A banner over the browser reminds you not to click in the page while Claude works, and Windows shows a notification when a run finishes or Claude asks for confirmation.
 4. Review every step: **Approve**, **Override** the status, add a comment, or **Request re-run**. A step is final only after your review.
 5. **Runs tab**: reopen past runs and their traces, and write **site notes**. Notes are added to the next run's prompt for that site.
 6. **Session → Export report** (Ctrl+E): Excel, PDF, Word or Markdown.
