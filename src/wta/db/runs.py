@@ -42,6 +42,8 @@ class RunEnd:
     cache_creation_tokens: int = 0
     five_hour_seen: float | None = None
     seven_day_seen: float | None = None
+    five_hour_used: float | None = None
+    model: str | None = None
     summary: str = ""
     claude_session_id: str | None = None
 

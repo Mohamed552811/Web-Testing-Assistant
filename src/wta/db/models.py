@@ -274,6 +274,9 @@ class Run(Base):
     five_hour_seen: Mapped[float | None] = mapped_column()
     seven_day_before: Mapped[float | None] = mapped_column()
     seven_day_seen: Mapped[float | None] = mapped_column()
+    # How much of the 5-hour window this run used (percentage points), for the estimate before a batch.
+    five_hour_used: Mapped[float | None] = mapped_column()
+    model: Mapped[str | None] = mapped_column(String(100))  # as Claude Code reported it
     summary: Mapped[str] = mapped_column(Text, default="")
     site_notes_used: Mapped[int] = mapped_column(Integer, default=0)
     # Claude Code's own session for this run, and when the test password was removed from it.

@@ -199,6 +199,8 @@ class RunPanel(QWidget):
                 f"tokens in {s.input_tokens} / out {s.output_tokens} / cache read {s.cache_read_tokens} "
                 f"/ cache write {s.cache_creation_tokens}"
             )
+            if outcome.model:
+                lines.append(f"  Model: {outcome.model}")
             if s.text:
                 lines.append(f"  Claude: {s.text.strip()}")
             lines += [f"  Error: {e}" for e in s.errors]
@@ -207,6 +209,8 @@ class RunPanel(QWidget):
             if seen:
                 was = f"{before.percent:.0f}% before → " if before and before.resets_at == seen.resets_at else ""
                 lines.append(f"  {label} plan usage: {was}{seen.percent:.0f}% reported during this run")
+        if outcome.five_hour_used is not None:
+            lines.append(f"  Used about {outcome.five_hour_used:.0f}% of the 5-hour window")
         lines += [f"  Notice: {n}" for n in outcome.notices]
         lines += [f"  Results problem: {p}" for p in outcome.problems]
         if outcome.exit_code not in (0,) and outcome.stderr_tail.strip():

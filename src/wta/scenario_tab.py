@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from wta import cost
 from wta.db import Database
 from wta.db import scenarios as sc
 from wta.db import site_notes
@@ -75,11 +76,14 @@ class ScenarioTab(QWidget):
         self.run_button = QPushButton("Run batch")
         self.run_button.setToolTip("Run Claude Code on scenarios in this batch that have no results or need a re-run")
         self.run_button.setStyleSheet("font-weight: bold;")
+        self.estimate_label = QLabel()
+        self.estimate_label.setProperty("muted", True)
         batch_row = QHBoxLayout()
         batch_row.addWidget(QLabel("Batch"))
         batch_row.addWidget(self.batch_combo)
         batch_row.addWidget(self.new_batch_button)
         batch_row.addStretch(1)
+        batch_row.addWidget(self.estimate_label)
         batch_row.addWidget(self.run_button)
 
         # Scenarios
@@ -323,7 +327,19 @@ class ScenarioTab(QWidget):
         self.add_scenario_button.setEnabled(len(scenarios) < MAX_SCENARIOS_PER_BATCH)
         self.edit_scenario_button.setEnabled(bool(scenarios))
         self.remove_scenario_button.setEnabled(bool(scenarios))
+        self._update_estimate()
         self._load_steps()
+
+    def _update_estimate(self) -> None:
+        """Estimated plan usage of what "Run batch" would run now, from earlier runs."""
+        selected = (sc.scenarios_to_run(self.db, self.session_id, self.batch, self.kind)
+                    if self.session_id is not None else [])
+        estimate = cost.estimate_batch(self.db, [s.kind for s, _rerun in selected])
+        self.estimate_label.setText(f"Estimated: {estimate.text()}" if estimate else "")
+        self.estimate_label.setToolTip(
+            "Average 5-hour plan usage of your recent finished runs, as reported by Claude Code. "
+            "Other Claude Code use on your plan at the same time also counts, so treat it as a rough guide."
+        )
 
     def add_scenario(self) -> None:
         dialog = SmokePageDialog(self) if self.smoke else ScenarioDialog(self)

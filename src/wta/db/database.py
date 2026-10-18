@@ -48,6 +48,9 @@ DATA_MIGRATIONS = {
     # Phase 11: a scenario's free-text goal becomes its steps.
     "scenario.test_steps": "UPDATE scenario SET test_steps = goal "
                            "WHERE kind = 'scenario' AND test_steps IS NULL AND goal != ''",
+    # Phase 15: what earlier runs used of the 5-hour window, so the first estimate has data.
+    "run.five_hour_used": "UPDATE run SET five_hour_used = five_hour_seen - five_hour_before "
+                          "WHERE outcome = 'finished' AND five_hour_seen >= five_hour_before",
 }
 
 

@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from wta import __version__
-from wta import cdp, icons, theme
+from wta import cdp, cost, icons, theme
 from wta import settings as app_settings
 from wta.welcome import AboutDialog, WelcomePage
 from wta.browser import BrowserPane, make_profile
@@ -489,6 +489,13 @@ class MainWindow(QMainWindow):
             )
             if answer != QMessageBox.StandardButton.Yes:
                 return
+        usage_path = self.app_dir / USAGE_FILE
+        estimate = cost.estimate_batch(self.db, [scenario.kind for scenario, _rerun in selected])
+        warning = cost.before_batch_warning(usage_path, self.settings.pause_at_percent, estimate)
+        if warning:
+            answer = QMessageBox.question(self, "Plan usage", f"{warning}\n\nRun the batch anyway?")
+            if answer != QMessageBox.StandardButton.Yes:
+                return
 
         runs_dir = default_runs_dir(self.app_dir)
         jobs = [
@@ -496,6 +503,7 @@ class MainWindow(QMainWindow):
                 scenario_id=scenario.id,
                 title=(f"Smoke: {scenario.name}" if scenario.smoke_page else scenario.name),
                 run_dir=run_folder(runs_dir, session.id, batch, scenario.position, smoke=scenario.smoke_page is not None),
+                model=self.settings.smoke_model if scenario.smoke_page else self.settings.scenario_model,
                 context=RunContext(
                     session_name=session.name,
                     target_url=session.target_url,
@@ -518,6 +526,9 @@ class MainWindow(QMainWindow):
             self.guard.activate(list(session.allowed_domains))
         self.batch_run = BatchRun(self.db, jobs, self.cdp_port, self.app_dir / USAGE_FILE, self.registry, self)
         self.batch_run.confirmation_needed.connect(self._ask_confirmation)
+        limit = self.settings.pause_at_percent
+        self.batch_run.pause_check = lambda: cost.pause_reason(usage_path, limit)
+        self.batch_run.paused.connect(self._batch_paused)
         self.batch_run.scenario_started.connect(self.run_panel.scenario_started)
         self.batch_run.event.connect(self.run_panel.add_event)
         self.batch_run.progress.connect(self.run_panel.set_progress)
@@ -534,7 +545,29 @@ class MainWindow(QMainWindow):
         self._batch_smoke = kind == ScenarioKind.SMOKE
         self.tabs.setCurrentWidget(self.run_panel)
         self._update_run_state()
+        if estimate is not None:
+            self.run_panel.summary.appendPlainText(f"Estimated plan usage for this batch: {estimate.text()}.\n")
         self.batch_run.start()
+
+    def _batch_paused(self, reason: str) -> None:
+        """Between scenarios, plan usage reached the pause limit: ask whether to go on."""
+        batch = self.batch_run
+        left = batch.remaining
+        self.browser.set_controlled(False)
+        self.run_panel.header.setText(f"Batch paused: plan usage limit reached. {left} left.")
+        self.notifier.notify("Batch paused", reason, warning=True)
+        answer = QMessageBox.question(
+            self, "Batch paused",
+            f"{reason}\n\n{left} more {'page' if self._batch_smoke else 'scenario'}(s) in this batch. "
+            "Continue anyway? Choosing No stops the batch; results so far are kept.",
+        )
+        if self.batch_run is not batch or not batch.waiting:
+            return  # stopped from elsewhere while the question was open
+        if answer == QMessageBox.StandardButton.Yes:
+            self.browser.set_controlled(True)
+            batch.resume()
+        else:
+            self.stop_run()
 
     def stop_run(self) -> None:
         if self.batch_run is not None:

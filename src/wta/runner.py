@@ -9,6 +9,7 @@ Each scenario gets its own run folder (the working directory of the Claude proce
   screenshots/   written by Claude, only for Blocked / Bug steps
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -43,6 +44,7 @@ class ScenarioJob:
     title: str
     context: RunContext
     run_dir: Path
+    model: str = ""  # passed to `claude --model`; empty = Claude Code's default
 
     @property
     def planned_steps(self) -> int:
@@ -71,6 +73,17 @@ class RunOutcome:
     usage_seen: dict[str, usage.WindowUsage] = field(default_factory=dict)
     stderr_tail: str = ""
     stopped: bool = False
+    model: str = ""  # the model Claude Code reported using
+
+    @property
+    def five_hour_used(self) -> float | None:
+        """Percentage points of the 5-hour window used: the last reading of the run minus the reading
+        before it. Unknown (None) without a reading from the same window before the run: counting from 0
+        would also count everything else used on the plan since the window started."""
+        seen, before = self.usage_seen.get("five_hour"), self.usage_at_start.get("five_hour")
+        if seen is None or before is None or before.resets_at != seen.resets_at:
+            return None
+        return round(max(seen.percent - before.percent, 0.0), 1)
 
 
 def make_redactor(*secrets: str):
@@ -173,7 +186,8 @@ class ScenarioRun(QObject):
         process.setProcessEnvironment(env)
         process.setWorkingDirectory(str(self.job.run_dir))
         process.setProgram(command[0])
-        process.setArguments(command[1:] + claude_launcher.run_args(self._mcp_config, resume_session=resume))
+        process.setArguments(command[1:] + claude_launcher.run_args(self._mcp_config, resume_session=resume,
+                                                                     model=self.job.model))
         process.setStandardErrorFile(str(self.job.run_dir / "stderr.log"), QIODevice.OpenModeFlag.Append)
         process.readyReadStandardOutput.connect(self._read_stdout)
         process.finished.connect(lambda code, _status: self._on_process_finished(code))
@@ -256,6 +270,8 @@ class ScenarioRun(QObject):
         parsed = parse_line(line)
         if parsed.session_id:
             self.session_id = parsed.session_id
+        if parsed.model:
+            self.outcome.model = parsed.model
         for event in parsed.events:
             self._emit(event.kind, event.text, event.tool)
         if parsed.rate_limit is not None:
@@ -396,6 +412,8 @@ class ScenarioRun(QObject):
             cache_creation_tokens=s.cache_creation_tokens if s else 0,
             five_hour_seen=seen["five_hour"].percent if "five_hour" in seen else None,
             seven_day_seen=seen["seven_day"].percent if "seven_day" in seen else None,
+            five_hour_used=self.outcome.five_hour_used,
+            model=self.outcome.model or None,
             summary=self.redact(s.text) if s else "",
             claude_session_id=self.session_id,
         ))
@@ -411,6 +429,7 @@ class BatchRun(QObject):
     usage_changed = Signal(object)
     confirmation_needed = Signal(object, object)  # ScenarioRun, ConfirmationRequest
     scenario_finished = Signal(object)  # RunOutcome
+    paused = Signal(str)  # why; answer with resume() or stop()
     all_finished = Signal()
 
     def __init__(
@@ -428,6 +447,10 @@ class BatchRun(QObject):
         self.current: ScenarioRun | None = None
         self.stopped = False
         self._index = 0
+        # Asked before every scenario after the first: a reason to pause (plan usage limit) or None.
+        self.pause_check: Callable[[], str | None] | None = None
+        self.waiting = False  # paused, waiting for resume() or stop()
+        self._pause_overridden = False  # the user chose to continue; do not ask again in this batch
 
     def start(self) -> None:
         self._next()
@@ -439,8 +462,22 @@ class BatchRun(QObject):
         """Stop the current scenario and skip the rest of the batch."""
         self.stopped = True
         self.jobs = self.jobs[: self._index]
-        if self.current:
+        if self.waiting:  # paused between scenarios: nothing is running, just finish
+            self.waiting = False
+            self._next()
+        elif self.current:
             self.current.stop()
+
+    def resume(self) -> None:
+        """Continue after a pause; the batch does not pause again."""
+        if self.waiting:
+            self.waiting = False
+            self._pause_overridden = True
+            self._next()
+
+    @property
+    def remaining(self) -> int:
+        return len(self.jobs) - self._index
 
     kill = stop
 
@@ -449,6 +486,12 @@ class BatchRun(QObject):
             self.current = None
             self.all_finished.emit()
             return
+        if self._index > 0 and self.pause_check is not None and not self._pause_overridden:
+            reason = self.pause_check()
+            if reason:
+                self.waiting = True
+                self.paused.emit(reason)
+                return
         job = self.jobs[self._index]
         self._index += 1
         run = ScenarioRun(self.db, job, self.cdp_port, self.usage_path, self.registry, self)
