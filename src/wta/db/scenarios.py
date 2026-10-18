@@ -290,7 +290,7 @@ def scenario_steps(db: Database, scenario_id: int) -> list[Step]:
         scenario = _get(orm, Scenario, scenario_id)
         steps = list(scenario.steps)
         for step in steps:
-            step.reviews, step.bugs, step.screenshots  # load before the ORM session closes
+            step.reviews, step.bugs, step.screenshots, step.capture_logs  # load before the ORM session closes
         return steps
 
 

@@ -1,6 +1,7 @@
 """Runs tab: reopen past runs and read their traces; write notes about the site."""
 
 from datetime import UTC, datetime
+from html import escape
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl, Signal
@@ -19,8 +20,10 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QSplitter,
+    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
+    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
@@ -29,7 +32,7 @@ from wta.db import Database
 from wta.db import runs as run_store
 from wta import claude_launcher
 from wta.db import site_notes
-from wta.db.models import Run, RunOutcomeKind, ScenarioKind, TraceKind
+from wta.db.models import PageIssueKind, Run, RunOutcomeKind, ScenarioKind, TraceKind
 from wta.run_panel import KIND_STYLE
 
 OUTCOME_LABELS = {
@@ -184,9 +187,14 @@ class RunsTab(QWidget):
         steps_layout.setContentsMargins(0, 0, 0, 0)
         steps_layout.addWidget(QLabel("Steps as this run reported them"))
         steps_layout.addWidget(self.steps_table)
+        self.findings = QTextBrowser()
+        self.findings.setOpenLinks(False)
+        self.detail_tabs = QTabWidget()
+        self.detail_tabs.addTab(trace_box, "Trace")
+        self.detail_tabs.addTab(self.findings, "Errors and speed")
         inner = QSplitter(Qt.Orientation.Vertical)
         inner.addWidget(steps_box)
-        inner.addWidget(trace_box)
+        inner.addWidget(self.detail_tabs)
         inner.setSizes([160, 320])
         detail_box = QGroupBox("Run details")
         detail_layout = QVBoxLayout(detail_box)
@@ -263,6 +271,8 @@ class RunsTab(QWidget):
         if run is None:
             self.summary.setText("No runs yet in this session." if self.session_id else "Open a session first.")
             self.trace.clear()
+            self.findings.clear()
+            self.detail_tabs.setTabText(1, "Errors and speed")
             return
         usage = []
         if run.five_hour_seen is not None:
@@ -293,6 +303,10 @@ class RunsTab(QWidget):
         self.steps_table.setColumnWidth(2, 300)
         self.steps_table.resizeRowsToContents()
         self._load_trace()
+        findings = run_store.page_findings(self.db, run.id)
+        problems = len(findings.issues) + len(findings.slow_loads)
+        self.detail_tabs.setTabText(1, f"Errors and speed ({problems})" if problems else "Errors and speed")
+        self.findings.setHtml(findings_html(findings))
 
     def _load_trace(self) -> None:
         self.trace.clear()
@@ -327,3 +341,38 @@ class RunsTab(QWidget):
         run = self._current_run()
         if run is not None and Path(run.run_dir).is_dir():
             QDesktopServices.openUrl(QUrl.fromLocalFile(run.run_dir))
+
+
+FINDING_SECTIONS = (
+    (PageIssueKind.CONSOLE, "Console errors and warnings"),
+    (PageIssueKind.EXCEPTION, "Uncaught JavaScript errors"),
+    (PageIssueKind.REQUEST, "Failed requests"),
+    (PageIssueKind.ACCESSIBILITY, "Accessibility (checked by the app)"),
+)
+
+
+def findings_html(findings: run_store.PageFindings) -> str:
+    """What the app saw on the page during a run, on every step: errors, failed requests, load times."""
+    parts = ["<p style='color:gray'>Seen by the app itself on the page during the whole run, including steps "
+             "that passed. This does not use your Claude plan.</p>"]
+    for kind, title in FINDING_SECTIONS:
+        issues = [i for i in findings.issues if i.kind == kind]
+        if not issues:
+            continue
+        parts.append(f"<h3>{title} ({len(issues)})</h3><ul>")
+        for issue in issues:
+            where = f" <span style='color:gray'>— {escape(issue.url)}</span>" if issue.url and issue.url not in issue.message else ""
+            level = "" if issue.level == "error" else f"<i>{escape(issue.level)}:</i> "
+            parts.append(f"<li>{local_time(issue.at)[11:]} {level}{escape(issue.message)}{where}</li>")
+        parts.append("</ul>")
+    if findings.loads:
+        slow = run_store.SLOW_LOAD_MS
+        parts.append(f"<h3>Page loads ({len(findings.loads)}; slow from {slow / 1000:.0f} s)</h3><table>")
+        for load in findings.loads:
+            flag = " <b style='color:#C77700'>slow</b>" if load.load_ms >= slow else ""
+            parts.append(f"<tr><td style='padding-right:12px'>{load.load_ms / 1000:.2f} s{flag}</td>"
+                         f"<td>{escape(load.url)}</td></tr>")
+        parts.append("</table>")
+    if len(parts) == 1:
+        parts.append("<p>No console errors, failed requests or page loads were recorded for this run.</p>")
+    return "".join(parts)

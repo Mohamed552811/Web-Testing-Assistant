@@ -40,6 +40,9 @@ class SettingsDialog(QDialog):
         self.pause_at.setSuffix(" % of the 5-hour window")
         self.pause_at.setToolTip("Before each scenario, the batch pauses and asks you once your 5-hour plan usage "
                                  "has reached this level. A scenario that is already running is not interrupted.")
+        self.smoke_accessibility = QCheckBox("Include accessibility checks")
+        self.smoke_accessibility.setToolTip("Claude checks labels, button and link names and image alt text; "
+                                            "the app measures text contrast on the page after the run.")
         self.scenario_model = self._model_combo()
         self.smoke_model = self._model_combo()
 
@@ -56,6 +59,7 @@ class SettingsDialog(QDialog):
         form.addRow("Pause batch at", self.pause_at)
         form.addRow("Model for scenarios", self.scenario_model)
         form.addRow("Model for smoke tests", self.smoke_model)
+        form.addRow("Smoke tests", self.smoke_accessibility)
         note = QLabel("Screenshot timing, risky-action confirmation and models apply from the next run. "
                       "You can also type a full model name.")
         note.setWordWrap(True)
@@ -78,6 +82,7 @@ class SettingsDialog(QDialog):
                                else settings.pause_at_percent)
         self._set_model(self.scenario_model, settings.scenario_model)
         self._set_model(self.smoke_model, settings.smoke_model)
+        self.smoke_accessibility.setChecked(settings.smoke_accessibility)
 
     @staticmethod
     def _model_combo() -> QComboBox:
@@ -110,4 +115,5 @@ class SettingsDialog(QDialog):
             pause_at_percent=PAUSE_OFF if self.pause_at.value() == self.pause_at.minimum() else self.pause_at.value(),
             scenario_model=self._model(self.scenario_model),
             smoke_model=self._model(self.smoke_model),
+            smoke_accessibility=self.smoke_accessibility.isChecked(),
         ).cleaned()

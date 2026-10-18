@@ -25,6 +25,7 @@ class RunContext:
     scenario_expected_result: str = ""
     test_account_role: str = ""  # e.g. "Sales manager"; empty for the session's main account
     fixture_files: list[str] = field(default_factory=list)  # under fixtures/ in the run folder
+    accessibility_checks: bool = False  # smoke tests: add accessibility checks to the checklist
 
 
 @dataclass
@@ -57,6 +58,13 @@ RISKY_ACTIONS = (
     "changing passwords, security or account settings, or anything else that cannot be undone"
 )
 
+
+ACCESSIBILITY_CHECKS = (
+    "- Add accessibility checks (\"screen\" = \"Accessibility\"), judged from the snapshot: form fields without a "
+    "label, buttons and links without an accessible name, images without alt text, and a missing main heading. "
+    "Mark a problem \"fail\" (Bug, severity \"3 - Medium\" unless it blocks use). Do not try to judge colour "
+    "contrast; the app measures it after the run.\n"
+)
 
 # Log in once per batch: the embedded browser keeps its cookies between scenarios.
 SIGN_IN_REUSE = (
@@ -126,6 +134,7 @@ def _work_intro(ctx: RunContext) -> str:
         "error page), every expected element is present and labelled, the main controls work (forms accept input, "
         "validation and error messages for wrong input, buttons respond), links and navigation on the allowed "
         "domains, console errors, and anything the user's page information mentions.\n"
+        + (ACCESSIBILITY_CHECKS if ctx.accessibility_checks else "") +
         "- Keep it quick: check where links point from the snapshot (their URLs) and open at most two of them; "
         "this test is about this one page, not the pages it links to.\n"
         "- THEN run the checks in order. After EVERY check, rewrite the file with its result and "

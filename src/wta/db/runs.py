@@ -9,7 +9,18 @@ from sqlalchemy.orm import selectinload
 
 from wta.db.database import Database
 from wta.db import store
-from wta.db.models import Run, RunOutcomeKind, RunTrace, Scenario, TestSession, TraceKind, utcnow
+from wta.db.models import (
+    PageIssue,
+    PageIssueKind,
+    PageLoad,
+    Run,
+    RunOutcomeKind,
+    RunTrace,
+    Scenario,
+    TestSession,
+    TraceKind,
+    utcnow,
+)
 from wta.session_files import clean_run, find_session_id
 
 
@@ -57,6 +68,64 @@ def finish_run(db: Database, run_id: int, end: RunEnd) -> None:
         run.ended_at = utcnow()
         for key, value in vars(end).items():
             setattr(run, key, value)
+
+
+MAX_PAGE_ISSUES_PER_RUN = 500  # a page that logs in a loop must not fill the database
+SLOW_LOAD_MS = 3000  # page loads at or above this are flagged as slow
+
+
+@dataclass
+class IssueRecord:
+    kind: PageIssueKind
+    message: str
+    url: str = ""
+    level: str = "error"
+    status: int | None = None
+
+
+def add_page_findings(db: Database, run_id: int, issues: list[IssueRecord],
+                      loads: list[tuple[str, int]]) -> int:
+    """Store what the page monitor saw for a run. Returns how many issues were dropped over the limit."""
+    with db.Session.begin() as orm:
+        stored = orm.query(PageIssue).filter_by(run_id=run_id).count()
+        room = max(MAX_PAGE_ISSUES_PER_RUN - stored, 0)
+        for issue in issues[:room]:
+            orm.add(PageIssue(run_id=run_id, kind=issue.kind, level=issue.level, message=issue.message[:4000],
+                              url=issue.url[:2000], status=issue.status))
+        for url, load_ms in loads:
+            orm.add(PageLoad(run_id=run_id, url=url[:2000], load_ms=load_ms))
+    return max(len(issues) - room, 0)
+
+
+@dataclass
+class PageFindings:
+    issues: list[PageIssue]
+    loads: list[PageLoad]
+
+    def count(self, kind: PageIssueKind) -> int:
+        return sum(1 for i in self.issues if i.kind == kind)
+
+    @property
+    def slow_loads(self) -> list[PageLoad]:
+        return [load for load in self.loads if load.load_ms >= SLOW_LOAD_MS]
+
+
+def page_findings(db: Database, run_id: int) -> PageFindings:
+    with db.Session() as orm:
+        issues = list(orm.scalars(select(PageIssue).where(PageIssue.run_id == run_id).order_by(PageIssue.id)))
+        loads = list(orm.scalars(select(PageLoad).where(PageLoad.run_id == run_id).order_by(PageLoad.id)))
+    return PageFindings(issues, loads)
+
+
+def latest_page_loads(db: Database, scenario_id: int) -> dict[str, int]:
+    """Load time (ms) per page URL (without #fragment) in the scenario's latest run; the last load wins."""
+    with db.Session() as orm:
+        run_id = orm.scalars(select(Run.id).where(Run.scenario_id == scenario_id)
+                             .order_by(Run.started_at.desc(), Run.id.desc()).limit(1)).first()
+        if run_id is None:
+            return {}
+        loads = orm.scalars(select(PageLoad).where(PageLoad.run_id == run_id).order_by(PageLoad.id))
+        return {load.url.split("#")[0]: load.load_ms for load in loads}
 
 
 def add_trace(db: Database, scenario_id: int, run_id: int | None, kind: TraceKind, text: str) -> None:

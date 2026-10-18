@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QSettings, QSize, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QKeySequence
-from PySide6.QtWebEngineCore import QWebEngineProfile, qWebEngineChromiumVersion
+from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEngineScript, qWebEngineChromiumVersion
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -23,20 +23,21 @@ from PySide6.QtWidgets import (
 )
 
 from wta import __version__
-from wta import cdp, cost, fixtures, icons, theme
+from wta import accessibility, cdp, cost, fixtures, icons, theme
 from wta import settings as app_settings
 from wta.welcome import AboutDialog, WelcomePage
 from wta.browser import BrowserPane, make_profile
 from wta.connection_dialog import ConnectionDialog
 from wta.domain_guard import NavigationGuard
 from wta.notify import Notifier
+from wta.page_monitor import PageMonitor
 from wta.processes import ProcessRegistry
 from wta.results import ConfirmationRequest
 from wta.db import Database, store
 from wta.db import runs as run_store
 from wta.db import scenarios as sc
 from wta.db import site_notes
-from wta.db.models import StepStatus, TestSession
+from wta.db.models import PageIssueKind, StepStatus, TestSession
 from wta.paths import data_dir, database_path
 from wta.db.models import ScenarioKind
 from wta.prompt import RunContext, SmokeContext
@@ -105,6 +106,7 @@ class MainWindow(QMainWindow):
         self.browser.stop_requested.connect(self.stop_run)
         self.browser.print_requested.connect(self._print_requested)
         self.notifier = Notifier(self, APP_TITLE)
+        self.page_monitor = PageMonitor(db, self._current_run_id, self)
         self._batch_outcomes: list[RunOutcome] = []
         self._batch_smoke = False
 
@@ -523,6 +525,7 @@ class MainWindow(QMainWindow):
                     test_account_password=account(scenario).password,
                     test_account_role="" if scenario.account_id is None else account(scenario).role,
                     fixture_files=fixture_files,
+                    accessibility_checks=bool(scenario.smoke_page) and self.settings.smoke_accessibility,
                     scenario_name=scenario.name,
                     scenario_steps=scenario.test_steps or "",
                     scenario_expected_result=scenario.expected_result or "",
@@ -553,6 +556,8 @@ class MainWindow(QMainWindow):
         self.run_panel.clear()
         self.run_panel.set_running(True)
         self.browser.set_controlled(True)
+        if self.cdp_port is not None:
+            self.page_monitor.attach(self.cdp_port, self.browser.view.page().devToolsId())
         self.notifier.run_started()
         self._batch_outcomes = []
         self._batch_smoke = kind == ScenarioKind.SMOKE
@@ -641,9 +646,41 @@ class MainWindow(QMainWindow):
             return  # stopped while the question was open
         run.answer_confirmation(box.clickedButton() is allow)
 
+    def _current_run_id(self) -> int | None:
+        current = self.batch_run.current if self.batch_run is not None else None
+        return current.run_id if current is not None else None
+
+    def _check_contrast(self, run_id: int) -> None:
+        """After a smoke run: measure text contrast on the page, in an isolated script world."""
+        def done(result) -> None:
+            issues = accessibility.contrast_issues(result)
+            if issues:
+                run_store.add_page_findings(self.db, run_id, issues, [])
+                self.runs_tab.refresh()
+        self.browser.view.page().runJavaScript(accessibility.CONTRAST_JS, QWebEngineScript.ScriptWorldId.ApplicationWorld,
+                                               done)
+
+    def _page_summary(self, run_id: int) -> str:
+        findings = run_store.page_findings(self.db, run_id)
+        parts = [f"{findings.count(kind)} {label}" for kind, label in (
+            (PageIssueKind.CONSOLE, "console errors/warnings"), (PageIssueKind.EXCEPTION, "uncaught errors"),
+            (PageIssueKind.REQUEST, "failed requests")) if findings.count(kind)]
+        if findings.slow_loads:
+            parts.append(f"{len(findings.slow_loads)} slow page load(s)")
+        return ("  Seen by the app on the page: " + ", ".join(parts) + " (details on the Runs tab)") if parts else ""
+
     def _scenario_finished(self, outcome: RunOutcome) -> None:
         title = next((j.title for j in self.batch_run.jobs if j.scenario_id == outcome.scenario_id), "Scenario")
         self.run_panel.scenario_finished(outcome, title)
+        run_id = self._current_run_id()
+        self.page_monitor.flush()
+        if run_id is not None:
+            summary = self._page_summary(run_id)
+            if summary:
+                self.run_panel.summary.appendPlainText(summary + "\n")
+            job = next((j for j in self.batch_run.jobs if j.scenario_id == outcome.scenario_id), None)
+            if job is not None and job.context.accessibility_checks:
+                self._check_contrast(run_id)
         self._batch_outcomes.append(outcome)
         for tab in self.review_tabs:
             tab.refresh(outcome.scenario_id)
@@ -653,6 +690,7 @@ class MainWindow(QMainWindow):
         if self.guard is not None:
             self.guard.deactivate()
         stopped = self.batch_run.stopped
+        self.page_monitor.detach()
         self.run_panel.all_finished(stopped=stopped)
         self.browser.set_controlled(False)
         heading, message = self._batch_message(stopped)

@@ -307,6 +307,12 @@ class Run(Base):
     transcript_cleaned_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     scenario: Mapped[Scenario] = relationship(back_populates="runs")
+    page_issues: Mapped[list["PageIssue"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan", order_by="PageIssue.id"
+    )
+    page_loads: Mapped[list["PageLoad"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan", order_by="PageLoad.id"
+    )
     traces: Mapped[list["RunTrace"]] = relationship(
         back_populates="run", order_by="(RunTrace.timestamp, RunTrace.id)"
     )
@@ -325,6 +331,44 @@ class RunTrace(Base):
 
     scenario: Mapped[Scenario] = relationship(back_populates="traces")
     run: Mapped[Run | None] = relationship(back_populates="traces")
+
+
+class PageIssueKind(enum.StrEnum):
+    CONSOLE = "console"  # console.error / console.warn
+    EXCEPTION = "exception"  # uncaught JavaScript error
+    REQUEST = "request"  # HTTP status 400 or more, or a request that failed
+    ACCESSIBILITY = "accessibility"  # found by the app's own check (text contrast)
+
+
+class PageIssue(Base):
+    """Something wrong on the page during a run, seen by the app itself (not by Claude), on any step."""
+
+    __tablename__ = "page_issue"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("run.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[PageIssueKind] = mapped_column(_enum(PageIssueKind, "page_issue_kind"))
+    level: Mapped[str] = mapped_column(String(20), default="error")
+    message: Mapped[str] = mapped_column(Text, default="")
+    url: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[int | None] = mapped_column(Integer)
+    at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    run: Mapped[Run] = relationship(back_populates="page_issues")
+
+
+class PageLoad(Base):
+    """A full page load during a run and how long it took (navigation start to the load event)."""
+
+    __tablename__ = "page_load"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("run.id", ondelete="CASCADE"), index=True)
+    url: Mapped[str] = mapped_column(Text)
+    load_ms: Mapped[int] = mapped_column(Integer)
+    at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    run: Mapped[Run] = relationship(back_populates="page_loads")
 
 
 class Bug(Base):

@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 
 from wta import cost
 from wta.db import Database, store
+from wta.db import runs as run_store
 from wta.db import scenarios as sc
 from wta.db import site_notes
 from wta.db.models import MAX_SCENARIOS_PER_BATCH, ReviewDecision, Scenario, ScenarioKind, Step, StepStatus
@@ -411,6 +412,7 @@ class ScenarioTab(QWidget):
         keep = select_id if select_id is not None else getattr(self._current_step(), "id", None)
         scenario = self._current_scenario()
         steps = sc.scenario_steps(self.db, scenario.id) if scenario else []
+        self._page_loads = run_store.latest_page_loads(self.db, scenario.id) if scenario else {}
         self.step_model.set_steps(steps)
         self.filter_bar.set_steps(steps)
         title = "Checks" if self.smoke else "Steps"
@@ -503,11 +505,16 @@ class ScenarioTab(QWidget):
             self.cards_area.hide()
             return
         self.override_combo.setCurrentIndex(self.override_combo.findData(step.final_status or step.status))
-        self.step_details.setHtml(_step_html(step, self.labels))
+        self.step_details.setHtml(_step_html(step, self.labels, self._page_load_of(step)))
         noun = "Check" if self.smoke else "Step"
         self.screenshot_card.set_paths([Path(s.file_path) for s in step.screenshots], f"{noun} {step.order} screenshot")
         self.bug_card.set_bug(step.bugs[0] if step.bugs else None)
         self.cards_area.setVisible(not self.screenshot_card.isHidden() or not self.bug_card.isHidden())
+
+    def _page_load_of(self, step: Step) -> int | None:
+        """How long the step's page took to load in the latest run, if the app saw it load."""
+        url = next((c.page_url for c in reversed(step.capture_logs) if c.page_url), "")
+        return getattr(self, "_page_loads", {}).get(url.split("#")[0]) if url else None
 
     def _bug_saved(self) -> None:
         step = self._current_step()
@@ -583,7 +590,15 @@ def _badge(status: StepStatus, labels: dict) -> str:
             f"&nbsp;{escape(labels[status])}&nbsp;</span>")
 
 
-def _step_html(step: Step, labels: dict = STATUS_LABELS) -> str:
+def _load_row(load_ms: int | None) -> str:
+    if load_ms is None:
+        return ""
+    slow = " <b style='color:#C77700'>slow</b>" if load_ms >= run_store.SLOW_LOAD_MS else ""
+    return (f"<tr><td style='color:gray;padding:2px 10px 2px 0'>Page load</td>"
+            f"<td style='padding:2px 0'>{load_ms / 1000:.2f} s{slow}</td></tr>")
+
+
+def _step_html(step: Step, labels: dict = STATUS_LABELS, load_ms: int | None = None) -> str:
     def row(label: str, value: str) -> str:
         return (f"<tr><td style='color:gray;padding:2px 10px 2px 0' valign='top'>{label}</td>"
                 f"<td style='padding:2px 0'>{escape(value or '—')}</td></tr>")
@@ -598,6 +613,7 @@ def _step_html(step: Step, labels: dict = STATUS_LABELS) -> str:
         row("Action / input", step.action),
         row("Expected", step.expected_result),
         row("Actual", step.actual_result),
+        _load_row(load_ms),
         "</table>",
         f"<p><b>Claude</b>&nbsp;&nbsp;{_badge(step.status, labels)}</p>",
         f"<p>{escape(step.reasoning or '—')}</p>",

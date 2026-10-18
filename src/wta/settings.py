@@ -54,6 +54,8 @@ class Settings:
     pause_at_percent: int = 80
     scenario_model: str = DEFAULT_MODEL
     smoke_model: str = "sonnet"
+    # Accessibility checks in smoke tests: labels, names and alt text by Claude, text contrast by the app.
+    smoke_accessibility: bool = True
 
     def cleaned(self) -> "Settings":
         """Unknown values fall back to the defaults."""
@@ -70,6 +72,7 @@ class Settings:
                               else default.pause_at_percent),
             scenario_model=clean_model(self.scenario_model),
             smoke_model=clean_model(self.smoke_model),
+            smoke_accessibility=bool(self.smoke_accessibility),
         )
 
 
