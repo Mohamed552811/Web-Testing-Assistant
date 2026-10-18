@@ -18,7 +18,8 @@ from PySide6.QtCore import QByteArray, QIODevice, QObject, QProcess, QProcessEnv
 from wta import claude_launcher, processes, session_files, usage
 from wta.db.database import Database
 from wta.db import runs
-from wta.db.models import RunOutcomeKind, TraceKind
+from wta.db.models import RunOutcomeKind, StepStatus, TraceKind
+from wta.db.scenarios import step_lines
 from wta.prompt import RunContext, build_prompt
 from wta.processes import ProcessRegistry
 from wta.results import (
@@ -42,6 +43,21 @@ class ScenarioJob:
     title: str
     context: RunContext
     run_dir: Path
+
+    @property
+    def planned_steps(self) -> int:
+        """Steps known before the run: the given steps plus the expected-result check (0 for smoke tests)."""
+        ctx = self.context
+        if ctx.smoke is not None:
+            return 0
+        given = len(step_lines(ctx.scenario_steps))
+        return given + 1 if given and ctx.scenario_expected_result else given
+
+
+def run_progress(results: Results, planned: int = 0) -> tuple[int, int]:
+    """(steps done, steps in total) from the latest results.json; a step is done once it has a status."""
+    done = sum(1 for step in results.steps if step.status != StepStatus.NOT_RUN)
+    return done, max(len(results.steps), planned)
 
 
 @dataclass
@@ -82,6 +98,7 @@ class ScenarioRun(QObject):
 
     event = Signal(object)  # TraceEvent
     results_changed = Signal(int)  # scenario id
+    progress = Signal(int, int)  # steps done, steps in total
     usage_changed = Signal(object)  # dict[str, WindowUsage]
     confirmation_needed = Signal(object)  # ConfirmationRequest
     finished = Signal(object)  # RunOutcome
@@ -288,6 +305,7 @@ class ScenarioRun(QObject):
         for notice in self.outcome.notices:
             self._report_once(f"Notice from Claude: {notice}")
         self.results_changed.emit(self.job.scenario_id)
+        self.progress.emit(*run_progress(results, self.job.planned_steps))
 
     def _report_once(self, text: str) -> None:
         if text not in self._reported:
@@ -389,6 +407,7 @@ class BatchRun(QObject):
     scenario_started = Signal(object, int, int)  # ScenarioJob, index (1-based), total
     event = Signal(object)
     results_changed = Signal(int)
+    progress = Signal(int, int)  # steps done, steps in total, for the current scenario
     usage_changed = Signal(object)
     confirmation_needed = Signal(object, object)  # ScenarioRun, ConfirmationRequest
     scenario_finished = Signal(object)  # RunOutcome
@@ -435,6 +454,7 @@ class BatchRun(QObject):
         run = ScenarioRun(self.db, job, self.cdp_port, self.usage_path, self.registry, self)
         run.event.connect(self.event)
         run.results_changed.connect(self.results_changed)
+        run.progress.connect(self.progress)
         run.usage_changed.connect(self.usage_changed)
         run.confirmation_needed.connect(lambda request, r=run: self.confirmation_needed.emit(r, request))
         run.finished.connect(self._on_finished)
