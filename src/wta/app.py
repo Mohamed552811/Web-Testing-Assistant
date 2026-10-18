@@ -39,12 +39,13 @@ from wta.db import scenarios as sc
 from wta.db import site_notes
 from wta.db.models import PageIssueKind, StepStatus, TestSession
 from wta.paths import data_dir, database_path
-from wta.db.models import ScenarioKind
+from wta.db.models import MAX_SCENARIOS_PER_BATCH, ScenarioKind
 from wta.prompt import RunContext, SmokeContext
 from wta.run_panel import RunPanel
 from wta.runs_tab import RunsTab, local_time
 from wta.runner import BatchRun, RunOutcome, ScenarioJob, ScenarioRun, default_runs_dir, run_folder
 from wta.scenario_tab import ScenarioTab
+from wta.suggest_dialog import SuggestDialog
 from wta.session_dialogs import OpenSessionDialog, SessionDialog
 from wta.settings_dialog import SettingsDialog
 from wta.export import export_report
@@ -114,6 +115,7 @@ class MainWindow(QMainWindow):
         self.scenario_tab = ScenarioTab(db, self)
         self.scenario_tab.status_message.connect(self.statusBar().showMessage)
         self.scenario_tab.run_requested.connect(lambda batch: self.run_batch(batch, ScenarioKind.SCENARIO))
+        self.scenario_tab.suggest_requested.connect(self.suggest_scenarios)
         self.smoke_tab = ScenarioTab(db, self, kind=ScenarioKind.SMOKE)
         self.smoke_tab.status_message.connect(self.statusBar().showMessage)
         self.smoke_tab.run_requested.connect(lambda batch: self.run_batch(batch, ScenarioKind.SMOKE))
@@ -247,6 +249,7 @@ class MainWindow(QMainWindow):
                                        (tab.rerun_button, "rotate-ccw", None),
                                        (tab.site_note_button, "file-plus", None),
                                        (tab.from_library_button, "folder-open", None),
+                                       (tab.suggest_button, "message-square", None),
                                        (tab.save_library_button, "download", None)):
                 icons.set_icon(button, name, role)
         icons.set_icon(self.run_panel.stop_button, "square", "on-accent")
@@ -579,6 +582,25 @@ class MainWindow(QMainWindow):
         if estimate is not None:
             self.run_panel.summary.appendPlainText(f"Estimated plan usage for this batch: {estimate.text()}.\n")
         self.batch_run.start()
+
+    def suggest_scenarios(self) -> None:
+        tab = self.scenario_tab
+        if tab.session_id is None:
+            return
+        room = MAX_SCENARIOS_PER_BATCH - tab.scenario_list.count()
+
+        def page_text(callback) -> None:
+            url = self.browser.view.url().toString()
+            self.browser.view.page().toPlainText(lambda text: callback(text or "", url))
+
+        dialog = SuggestDialog(self.app_dir / "suggest", self.app_dir / USAGE_FILE, self.settings.scenario_model,
+                               room, page_text, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted and dialog.chosen():
+            try:
+                tab.add_suggested(dialog.chosen(), dialog.to_library)
+            except sc.BatchFullError as exc:
+                QMessageBox.warning(self, "Suggest scenarios", str(exc))
+        self.top_bar.refresh_usage()
 
     def _batch_paused(self, reason: str) -> None:
         """Between scenarios, plan usage reached the pause limit: ask whether to go on."""

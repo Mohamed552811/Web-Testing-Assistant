@@ -60,6 +60,7 @@ class ScenarioTab(QWidget):
     status_message = Signal(str)
     run_requested = Signal(int)  # batch number
     site_note_saved = Signal()
+    suggest_requested = Signal()  # the app opens the suggestion dialog (it has the browser and the settings)
 
     def __init__(self, db: Database, parent: QWidget | None = None, kind: ScenarioKind = ScenarioKind.SCENARIO) -> None:
         super().__init__(parent)
@@ -95,13 +96,16 @@ class ScenarioTab(QWidget):
         self.remove_scenario_button = QPushButton("Remove")
         self.from_library_button = QPushButton("Add from library…")
         self.from_library_button.setToolTip(f"Add saved {self.item_name}s, or import test cases from Excel or CSV")
+        self.suggest_button = QPushButton("Suggest…")
+        self.suggest_button.setToolTip("Claude suggests scenarios from a user story or the page in the browser")
+        self.suggest_button.setVisible(not self.smoke)
         self.save_library_button = QPushButton("Save to library")
         self.save_library_button.setToolTip(f"Keep this {self.item_name} in the library to run it again later, "
                                             "for example on the next build")
         self.scenario_count = QLabel()
         scenario_buttons = QHBoxLayout()
         for w in (self.add_scenario_button, self.edit_scenario_button, self.remove_scenario_button,
-                  self.from_library_button, self.save_library_button):
+                  self.from_library_button, self.suggest_button, self.save_library_button):
             scenario_buttons.addWidget(w)
         scenario_buttons.addStretch(1)
         scenario_buttons.addWidget(self.scenario_count)
@@ -215,6 +219,7 @@ class ScenarioTab(QWidget):
         self.remove_scenario_button.clicked.connect(self.remove_scenario)
         self.from_library_button.clicked.connect(self.add_from_library)
         self.save_library_button.clicked.connect(self.save_to_library)
+        self.suggest_button.clicked.connect(self.suggest_requested)
         self.step_table.selectionModel().currentRowChanged.connect(lambda *_: self._show_step())
         self.step_table.doubleClicked.connect(lambda _index: self.edit_step())
         self.add_step_button.clicked.connect(self.add_step)
@@ -245,6 +250,7 @@ class ScenarioTab(QWidget):
             self.add_scenario_button.setEnabled(False)
             self.remove_scenario_button.setEnabled(False)
             self.from_library_button.setEnabled(False)
+            self.suggest_button.setEnabled(False)
         else:
             self._load_scenarios()  # recomputes the scenario buttons (e.g. batch full)
 
@@ -343,6 +349,7 @@ class ScenarioTab(QWidget):
         self.edit_scenario_button.setEnabled(bool(scenarios))
         self.remove_scenario_button.setEnabled(bool(scenarios))
         self.from_library_button.setEnabled(len(scenarios) < MAX_SCENARIOS_PER_BATCH)
+        self.suggest_button.setEnabled(len(scenarios) < MAX_SCENARIOS_PER_BATCH)
         self.save_library_button.setEnabled(bool(scenarios))
         self._update_estimate()
         self._load_steps()
@@ -418,6 +425,19 @@ class ScenarioTab(QWidget):
             return
         self._load_scenarios(select_id=added[-1].id if added else None)
         self.status_message.emit(f"Added {len(added)} {self.item_name}(s) from the library.")
+
+    def add_suggested(self, scenarios: list, to_library: bool) -> list:
+        """Add scenarios Claude suggested (and the user picked) to the batch, and to the library if asked."""
+        if to_library:
+            items = library.add_items(self.db, [library.ItemInput(scenario=s, source="Suggested by Claude")
+                                                for s in scenarios])
+            added = library.add_to_batch(self.db, self.session_id, self.batch, [i.id for i in items], self.kind)
+        else:
+            added = [sc.add_scenario(self.db, self.session_id, self.batch, s) for s in scenarios]
+        self._load_scenarios(select_id=added[-1].id if added else None)
+        self.status_message.emit(f"Added {len(added)} suggested scenario(s)" + (" and saved them to the library."
+                                                                               if to_library else "."))
+        return added
 
     def save_to_library(self) -> None:
         scenario = self._current_scenario()

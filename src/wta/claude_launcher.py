@@ -142,6 +142,21 @@ def run_args(mcp_config: Path, resume_session: str | None = None, model: str = "
     ]
 
 
+def suggest_args(model: str = "") -> list[str]:
+    """Arguments for asking Claude to suggest scenarios: text in, text out. No tools at all, no MCP
+    servers, none of the user's settings, and the session is not saved (the prompt may hold page text)."""
+    return (["--model", model] if model else []) + [
+        "-p",
+        "--output-format", "stream-json",
+        "--verbose",
+        "--restricted",
+        "--strict-mcp-config",
+        "--tools=",
+        "--permission-mode", "dontAsk",
+        "--no-session-persistence",
+    ]
+
+
 def playwright_mcp_config(cdp_port: int, output_dir: Path) -> dict:
     """MCP config that attaches Playwright MCP to the embedded browser's CDP endpoint."""
     return {

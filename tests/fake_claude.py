@@ -4,6 +4,7 @@ FAKE_CLAUDE_MODE selects the behaviour:
   (unset)   normal run with one pass and one fail step
   slow      starts a child process (like Playwright MCP) and then waits, so the run can be stopped
   confirm   first run asks for confirmation; a --resume run acts on APPROVED / DECLINED
+A call with no tools (--tools= and --no-session-persistence) is a request for scenario suggestions.
 """
 
 import json
@@ -35,6 +36,24 @@ def result(text="Done."):
 # Like Claude Code, report the model in use: the one asked for with --model, or a default.
 model = sys.argv[sys.argv.index("--model") + 1] if "--model" in sys.argv else "fake-default-model"
 out({"type": "system", "subtype": "init", "tools": ["Write"], "session_id": "fake-session", "model": model})
+
+if "--tools=" in sys.argv and "--no-session-persistence" in sys.argv:
+    # Scenario suggestions: reply with a JSON list in a code fence, as Claude sometimes does.
+    suggestions = [
+        {"name": "Sign in with a valid account", "steps": ["Open the login page", "Enter the test account",
+                                                           "Press Sign in"],
+         "expected_result": "The home page shows the user's name", "test_data": ""},
+        {"name": "Sign in with a wrong password", "steps": ["Open the login page", "Enter a wrong password"],
+         "expected_result": "An error message is shown", "test_data": "{{random_text}}"},
+        {"name": "", "steps": ["no name: dropped"], "expected_result": "", "test_data": ""},
+    ]
+    out({"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "unifiedWindows": {
+        "five_hour": {"utilization": 0.33, "resetsAt": 4102444800}}}})
+    fence = "`" * 3
+    text = f"Here you go:\n{fence}json\n{json.dumps(suggestions)}\n{fence}" if "SAY NO" not in prompt else "No."
+    out({"type": "result", "subtype": "success", "is_error": False, "num_turns": 1, "duration_ms": 10,
+         "result": text, "usage": {"input_tokens": 1, "output_tokens": 1}, "session_id": "fake-suggest"})
+    sys.exit(0)
 
 if os.environ.get("CLAUDE_CONFIG_DIR"):
     # Save the conversation the way Claude Code does: projects/<cwd with non-alphanumerics as "-">/<id>.jsonl
