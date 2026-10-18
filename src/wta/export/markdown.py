@@ -10,7 +10,7 @@ from datetime import datetime
 from itertools import groupby
 from pathlib import Path
 
-from wta.export.model import BugRow, Report, StepRow
+from wta.export.model import LOGO_PNG, BugRow, Report, StepRow
 from wta.step_table import PENDING, RERUN
 
 UNREVIEWED = (PENDING, RERUN)
@@ -155,7 +155,10 @@ def write_markdown(report: Report, path: Path) -> Path:
         (folder / name).write_text(text, encoding="utf-8")
         bug_files.append((f"BUG-{number:03d}", bug, name))
 
+    shutil.copy2(LOGO_PNG, folder / "logo.png")
     lines = [
+        '<img src="logo.png" alt="Web Testing Assistant" width="48">',
+        "",
         f"# {report.session_name} Test Report",
         "",
         "## Test Information",

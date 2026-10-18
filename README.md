@@ -1,3 +1,5 @@
+<img src="src/wta/assets/logo.png" alt="Web Testing Assistant logo" width="96">
+
 # Web Testing Assistant
 
 A desktop app where Claude Code tests web apps in an embedded browser and you review every step.

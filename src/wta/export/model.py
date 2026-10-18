@@ -18,6 +18,7 @@ from wta.db.models import ReviewDecision, ScenarioKind, Step, StepStatus
 from wta.step_table import PENDING, RERUN, SMOKE_LABELS, STATUS_LABELS
 
 FINAL_COLUMNS = ("Pass", "Fail / Bug", "Blocked", "Not run", PENDING, RERUN)
+LOGO_PNG = Path(__file__).resolve().parents[1] / "assets" / "logo-64.png"  # the app logo in report headers
 KIND_LABELS = {ScenarioKind.SCENARIO: "Scenario", ScenarioKind.SMOKE: "Smoke test"}
 
 

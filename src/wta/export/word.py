@@ -9,7 +9,7 @@ from docx.oxml.ns import qn
 from docx.shared import Cm, Pt
 
 from wta.export.html import STATUS_COLORS, other_screenshot_rows
-from wta.export.model import FINAL_COLUMNS, Report, summary_pairs
+from wta.export.model import FINAL_COLUMNS, LOGO_PNG, Report, summary_pairs
 
 RESULT_HEADERS = ("Type", "Scenario / page", "#", "Action / input", "Expected", "Actual", "Claude", "Final",
                   "Review comment")
@@ -55,6 +55,7 @@ def write_docx(report: Report, path: Path) -> Path:
     doc.styles["Normal"].font.size = Pt(9)
     picture_width = min(Cm(16), section.page_width - section.left_margin - section.right_margin)
 
+    doc.add_picture(str(LOGO_PNG), width=Cm(1.4))
     doc.add_heading(report.title, level=0)
     _key_value(doc, ("Item", "Value"), summary_pairs(report))
 

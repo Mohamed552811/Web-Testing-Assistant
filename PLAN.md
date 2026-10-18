@@ -91,3 +91,9 @@ From Phase 11 (2026-10-18):
 - The startup upgrade copies an existing scenario's goal into its steps once, when the column is added. The user's real scenario keeps its text word for word; as it was one free-text block, its intro line becomes step 1 and Expected result starts empty, worth tidying by hand once.
 - Steps are renumbered on save whatever numbering was typed ("2)", "Step 9:", bullets, none).
 - Real run: Claude recorded one step per given step with the given wording, then the expected-result check as its own final step (Fail, with what it actually saw).
+
+From Phase 12 (2026-10-18):
+- Icons are Lucide 1.51.0 (ISC, newest release at least two weeks old), 21 SVGs copied into src/wta/assets/icons with the licence. They are tinted at runtime and re-tinted on theme change. Icons on accent buttons get a muted disabled version, because a white icon vanished on the grey disabled button.
+- The logo is original artwork. tools/build_icons.py renders it to PNGs and a multi-size app.ico (16 to 256 px, PNG entries, built with the standard library); the 16 px size uses a simplified bug-only SVG. The taskbar shows the logo because the process sets its own AppUserModelID.
+- The theme follows Windows by default (Qt 6.12 QStyleHints.colorScheme) and switches live; light #9B2D20, dark #C8553D. Fail and Bug status colours stay a separate red.
+- Layout is remembered in ui-state.ini in the data folder (window geometry, panel split, last tab).

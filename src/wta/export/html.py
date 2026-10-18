@@ -6,6 +6,8 @@ from pathlib import Path
 
 from wta.export.model import FINAL_COLUMNS, Report, summary_pairs
 
+LOGO_RESOURCE = "logo://app"  # registered by the PDF writer
+
 STATUS_COLORS = {"Pass": "#c6efce", "Fail": "#ffc7ce", "Bug": "#ffc7ce", "Blocked": "#ffeb9c", "Not run": "#e7e6e6"}
 
 
@@ -31,7 +33,9 @@ def report_html(report: Report, image_width: int = 360) -> str:
         "table { border-collapse: collapse; } td, th { border: 1px solid #999; padding: 3px; vertical-align: top; }",
         "th { background: #203040; color: white; }",
         "</style></head><body>",
-        f"<h1>{escape(report.title)}</h1>",
+        "<table cellspacing='0'><tr>"
+        f"<td style='border:none; padding-right:10px'><img src='{LOGO_RESOURCE}' width='44' height='44'></td>"
+        f"<td style='border:none; vertical-align:middle'><h1>{escape(report.title)}</h1></td></tr></table>",
         '<table cellspacing="0">',
     ]
     out += [f"<tr><td><b>{escape(k)}</b></td><td>{_text(v)}</td></tr>" for k, v in summary_pairs(report)]

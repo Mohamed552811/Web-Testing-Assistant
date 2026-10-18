@@ -121,7 +121,7 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(wb["Results"].max_row, 6)
         with zipfile.ZipFile(path) as z:
             media = [n for n in z.namelist() if n.startswith("xl/media/")]
-            self.assertEqual(len(media), 3)  # bug + blocked in Results, bug again in Bugs
+            self.assertEqual(len(media), 4)  # logo + bug and blocked in Results + bug again in Bugs
             self.assertEqual(z.read(media[0])[:8], b"\x89PNG\r\n\x1a\n")
             for name in z.namelist():
                 self.no_secrets(z.read(name), name)
@@ -131,7 +131,7 @@ class ExportTests(unittest.TestCase):
         path = export_report(self.db, self.session_id, self.base / "out" / "report", "docx")
         self.assertEqual(path.suffix, ".docx")
         doc = Document(str(path))
-        self.assertEqual(len(doc.inline_shapes), 2)  # bug screenshot + blocked screenshot
+        self.assertEqual(len(doc.inline_shapes), 3)  # logo + bug screenshot + blocked screenshot
         text = "\n".join(p.text for p in doc.paragraphs)
         self.assertIn("1. Payment fails", text)
         self.assertIn("Other screenshots", text)
@@ -159,8 +159,9 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(summary, folder / "SUMMARY.md")
         self.assertEqual(sorted(p.name for p in folder.iterdir()), [
             "BUG-001-payment-fails.md", "BUG-001-screenshot.png", "BUG-002-no-empty-cart-message.md", "SUMMARY.md",
-            "TC001-step-4.png",
+            "TC001-step-4.png", "logo.png",
         ])
+        self.assertTrue(summary.read_text("utf-8").startswith('<img src="logo.png"'))
         text = summary.read_text("utf-8")
         for needle in (
             "# Shop | checkout Test Report", "## Test Information", "- **Tester:** Staff QA",

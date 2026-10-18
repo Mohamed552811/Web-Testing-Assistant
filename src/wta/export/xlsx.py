@@ -8,7 +8,7 @@ from openpyxl.drawing.image import Image
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from wta.export.model import FINAL_COLUMNS, Report, summary_pairs
+from wta.export.model import FINAL_COLUMNS, LOGO_PNG, Report, summary_pairs
 
 THUMB_WIDTH = 320  # px
 HEADER_FILL = PatternFill("solid", fgColor="203040")
@@ -98,8 +98,12 @@ def write_xlsx(report: Report, path: Path) -> Path:
 
     summary = wb.active
     summary.title = "Summary"
-    summary["A1"] = report.title
-    summary["A1"].font = Font(bold=True, size=14)
+    # Logo top-left, title beside it.
+    summary.add_image(PngImage(LOGO_PNG, 44, 44), "A1")
+    summary.row_dimensions[1].height = 38
+    summary["B1"] = report.title
+    summary["B1"].font = Font(bold=True, size=14)
+    summary["B1"].alignment = Alignment(vertical="center")
     for row, (key, value) in enumerate(summary_pairs(report), start=3):
         summary.cell(row=row, column=1, value=key).font = Font(bold=True)
         summary.cell(row=row, column=2, value=value)

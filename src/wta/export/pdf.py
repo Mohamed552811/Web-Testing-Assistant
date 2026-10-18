@@ -8,8 +8,8 @@ from pathlib import Path
 from PySide6.QtCore import QMarginsF, QSizeF, QUrl
 from PySide6.QtGui import QImage, QPageLayout, QPageSize, QPdfWriter, QTextDocument
 
-from wta.export.html import all_screenshots, image_name, report_html
-from wta.export.model import Report
+from wta.export.html import LOGO_RESOURCE, all_screenshots, image_name, report_html
+from wta.export.model import LOGO_PNG, Report
 
 
 def write_pdf(report: Report, path: Path) -> Path:
@@ -24,6 +24,7 @@ def write_pdf(report: Report, path: Path) -> Path:
     ))
 
     document = QTextDocument()
+    document.addResource(QTextDocument.ResourceType.ImageResource, QUrl(LOGO_RESOURCE), QImage(str(LOGO_PNG)))
     for shot in all_screenshots(report):
         image = QImage(str(shot))
         if not image.isNull():
