@@ -173,11 +173,35 @@ class ResultsTests(unittest.TestCase):
         self.assertEqual(len(read_results(self.run_dir).steps), 1)
 
 
+class StepsPromptTests(unittest.TestCase):
+    """Phase 11: Claude follows the given steps and judges against the expected result."""
+
+    def ctx(self, steps="", expected=""):
+        return RunContext("S", "https://a.example.com", ["a.example.com"], "", "", "Price list", steps, "",
+                          scenario_expected_result=expected)
+
+    def test_steps_and_expected_result(self):
+        text = build_prompt(self.ctx("1. Open Orders\nClick + Order", "Rate shows 1 JOD = 4.30 AED"))
+        self.assertIn("- Steps to follow, in order:\n  1. Open Orders\n  2. Click + Order\n", text)
+        self.assertIn("- Expected result (what must be true after the last step): Rate shows 1 JOD = 4.30 AED", text)
+        self.assertIn("Follow the given steps in order", text)
+        self.assertIn("record that check as its own final step", text)
+        self.assertNotIn("- Goal:", text)
+
+    def test_without_steps_claude_plans_them(self):
+        text = build_prompt(self.ctx(expected="Order saved"))
+        self.assertIn("No steps were given: work out the steps yourself", text)
+        self.assertIn("record that check as its own final step", text)
+        bare = build_prompt(self.ctx())
+        self.assertIn("(not given)", bare)
+        self.assertNotIn("record that check as its own final step", bare)  # nothing to check against
+
+
 class PromptTests(unittest.TestCase):
     def ctx(self, **kw):
         values = dict(session_name="S", target_url="https://app.test/login", allowed_domains=["app.test", "cdn.test"],
                       test_account_email="qa@app.test", test_account_password="pw-1", scenario_name="Login",
-                      scenario_goal="Log in", scenario_test_data="")
+                      scenario_steps="Log in", scenario_test_data="")
         values.update(kw)
         return RunContext(**values)
 

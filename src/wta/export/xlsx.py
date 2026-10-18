@@ -115,6 +115,18 @@ def write_xlsx(report: Report, path: Path) -> Path:
         for col, key in enumerate(FINAL_COLUMNS, start=2):
             summary.cell(row=row, column=col, value=counter.get(key, 0))
         summary.cell(row=row, column=len(FINAL_COLUMNS) + 2, value=sum(counter.values()))
+    if report.scenarios:
+        row += 2
+        summary.cell(row=row, column=1, value="Scenarios").font = Font(bold=True, size=12)
+        row += 1
+        for col, name in enumerate(("Batch", "Scenario", "Steps", "Expected result", "Test data"), start=1):
+            cell = summary.cell(row=row, column=col, value=name)
+            cell.fill, cell.font = HEADER_FILL, HEADER_FONT
+        for info in report.scenarios:
+            row += 1
+            for col, value in enumerate((info.batch, info.name, info.numbered_steps(), info.expected_result,
+                                         info.test_data), start=1):
+                summary.cell(row=row, column=col, value=value).alignment = WRAP
     summary.column_dimensions["A"].width = 26
     summary.column_dimensions["B"].width = 60
     for col in range(3, len(FINAL_COLUMNS) + 3):

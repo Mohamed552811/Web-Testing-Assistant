@@ -32,7 +32,7 @@ class RunnerTests(unittest.TestCase):
         self.session = store.create_session(self.db, store.SessionDetails(
             name="S", target_url="http://127.0.0.1:1/login", test_account_email="qa@x.test",
             test_account_password="pw-secret-9"))
-        self.scenario = sc.add_scenario(self.db, self.session.id, 1, sc.ScenarioInput(name="Login", goal="Log in"))
+        self.scenario = sc.add_scenario(self.db, self.session.id, 1, sc.ScenarioInput(name="Login", steps="Log in"))
 
     def tearDown(self):
         self.db.close()

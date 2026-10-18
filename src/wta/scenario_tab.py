@@ -259,7 +259,10 @@ class ScenarioTab(QWidget):
                 )
             else:
                 item = QListWidgetItem(f"{scenario.position}. {scenario.name}")
-                item.setToolTip(f"Goal: {scenario.goal or '—'}\nTest data: {scenario.test_data or '—'}")
+                item.setToolTip(
+                    f"Steps:\n{scenario.test_steps or '—'}\n\nExpected result: {scenario.expected_result or '—'}"
+                    f"\nTest data: {scenario.test_data or '—'}"
+                )
             item.setData(Qt.ItemDataRole.UserRole, scenario)
             self.scenario_list.addItem(item)
         row = next((i for i, s in enumerate(scenarios) if s.id == keep), 0 if scenarios else -1)
@@ -296,7 +299,7 @@ class ScenarioTab(QWidget):
                 sc.update_smoke_page(self.db, scenario.id, dialog.data())
                 self._load_scenarios(select_id=scenario.id)
             return
-        dialog = ScenarioDialog(self, sc.ScenarioInput(scenario.name, scenario.goal, scenario.test_data))
+        dialog = ScenarioDialog(self, sc.ScenarioInput.of(scenario))
         if dialog.exec() == QDialog.DialogCode.Accepted:
             sc.update_scenario(self.db, scenario.id, dialog.data())
             self._load_scenarios(select_id=scenario.id)

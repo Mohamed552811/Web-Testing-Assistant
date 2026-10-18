@@ -43,6 +43,21 @@ def _add_missing_columns(engine: Engine) -> list[str]:
     return added
 
 
+# One-time data changes that belong to a newly added column; each runs only when its column is added.
+DATA_MIGRATIONS = {
+    # Phase 11: a scenario's free-text goal becomes its steps.
+    "scenario.test_steps": "UPDATE scenario SET test_steps = goal "
+                           "WHERE kind = 'scenario' AND test_steps IS NULL AND goal != ''",
+}
+
+
+def _run_data_migrations(engine: Engine, added: list[str]) -> None:
+    with engine.begin() as conn:
+        for column in added:
+            if column in DATA_MIGRATIONS:
+                conn.execute(text(DATA_MIGRATIONS[column]))
+
+
 class Database:
     """Owns the engine for one SQLite file and hands out ORM sessions."""
 
@@ -52,6 +67,7 @@ class Database:
         event.listen(self.engine, "connect", _enable_foreign_keys)
         Base.metadata.create_all(self.engine)
         self.upgraded_columns = _add_missing_columns(self.engine)
+        _run_data_migrations(self.engine, self.upgraded_columns)
         self.Session = sessionmaker(self.engine, expire_on_commit=False)
 
     def close(self) -> None:

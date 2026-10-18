@@ -3,6 +3,7 @@
 import json
 from dataclasses import dataclass, field
 
+from wta.db.scenarios import step_lines
 from wta.results import BUG_EXAMPLE, RESULTS_FILE, SCHEMA_EXAMPLE, SCREENSHOT_DIR
 from wta.settings import SCREENSHOTS_EVERY_STEP, SCREENSHOTS_ONCE_PER_PAGE, SCREENSHOTS_BUG_BLOCKED
 
@@ -15,12 +16,13 @@ class RunContext:
     test_account_email: str
     test_account_password: str
     scenario_name: str
-    scenario_goal: str
+    scenario_steps: str  # one step per line (numbering optional)
     scenario_test_data: str
     confirm_risky_actions: bool = False
     site_notes: list[str] = field(default_factory=list)
     smoke: "SmokeContext | None" = None
     screenshot_timing: str = SCREENSHOTS_BUG_BLOCKED
+    scenario_expected_result: str = ""
 
 
 @dataclass
@@ -66,11 +68,14 @@ Before a risky action ({RISKY_ACTIONS}), do NOT do it yet. Instead:
 
 def _task_section(ctx: RunContext) -> str:
     if ctx.smoke is None:
+        steps = step_lines(ctx.scenario_steps)
+        steps_text = "\n".join(f"  {i}. {line}" for i, line in enumerate(steps, start=1)) or "  (not given)"
         return (
             "## Scenario\n"
             f"- Session: {ctx.session_name}\n"
             f"- Name: {ctx.scenario_name}\n"
-            f"- Goal: {ctx.scenario_goal or '(not given)'}\n"
+            f"- Steps to follow, in order:\n{steps_text}\n"
+            f"- Expected result (what must be true after the last step): {ctx.scenario_expected_result or '(not given)'}\n"
             f"- Test data: {ctx.scenario_test_data or '(none)'}"
         )
     page = ctx.smoke
@@ -88,11 +93,20 @@ def _task_section(ctx: RunContext) -> str:
 
 def _work_intro(ctx: RunContext) -> str:
     if ctx.smoke is None:
-        return (
-            "- Break the scenario into small steps (one user action and its check per step) and carry them out in order.\n"
-            f"- After EVERY step, rewrite {RESULTS_FILE} in the current working directory with ALL steps so far and "
-            '"state": "running". The user watches this file live.'
-        )
+        live = (f"- After EVERY step, rewrite {RESULTS_FILE} in the current working directory with ALL steps so far and "
+                '"state": "running". The user watches this file live.')
+        if not step_lines(ctx.scenario_steps):
+            plan = ("- No steps were given: work out the steps yourself from the name and the expected result, small "
+                    "steps (one user action and its check per step), and carry them out in order.\n")
+        else:
+            plan = ("- Follow the given steps in order. Record each as one step in results.json (split it only if it "
+                    "contains several user actions), and keep the given step's wording in \"action\" where you can.\n"
+                    "- If a given step cannot be done (the element is missing, an error appears), mark it \"fail\" or "
+                    "\"blocked\" with your reasoning, and carry on only if the remaining steps still make sense.\n")
+        if ctx.scenario_expected_result:
+            plan += ("- After the last step, check the expected result and record that check as its own final step: "
+                     "\"pass\" if it is met exactly, \"fail\" (a bug) if not, with what you actually saw in \"actual\".\n")
+        return plan + live
     return (
         "- This is a smoke test: a quick, broad check that this one page works. Each check is one step.\n"
         f"- FIRST, before checking anything, write the whole checklist to {RESULTS_FILE}: every check as a step with "

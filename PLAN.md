@@ -85,3 +85,9 @@ From Phase 10 (2026-10-18):
 - Windows: session file paths easily pass 260 characters, and then ordinary file calls report the file as missing. The first version marked such a run "cleaned" while the password stayed. Session files are now accessed in the long-path form, and a run is only marked cleaned once its session file was found.
 - The placeholder now reads "[test password, removed after the run]". With plain "[test password]", a resumed Claude assumed it had typed that text and wrongly suspected an authentication bug.
 - Claude Code sometimes fails with "Failed to refresh OAuth token: another Claude Code process is refreshing it" when another Claude Code session is active. It cleared after about 2 minutes. The app showed the message and marked the run failed.
+
+From Phase 11 (2026-10-18):
+- New scenario fields are stored as `scenario.test_steps` and `scenario.expected_result`. `Scenario.steps` was already taken by Claude's step results. Smoke pages keep their description in `goal`.
+- The startup upgrade copies an existing scenario's goal into its steps once, when the column is added. The user's real scenario keeps its text word for word; as it was one free-text block, its intro line becomes step 1 and Expected result starts empty, worth tidying by hand once.
+- Steps are renumbered on save whatever numbering was typed ("2)", "Step 9:", bullets, none).
+- Real run: Claude recorded one step per given step with the given wording, then the expected-result check as its own final step (Fail, with what it actually saw).

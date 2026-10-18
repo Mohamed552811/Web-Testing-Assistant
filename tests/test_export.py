@@ -46,7 +46,8 @@ class ExportTests(unittest.TestCase):
         bug_png = make_png(cls.base / "bug.png")
         blocked_png = make_png(cls.base / "blocked.png", color="yellow")
 
-        scenario = sc.add_scenario(cls.db, session.id, 1, sc.ScenarioInput("Checkout"))
+        scenario = sc.add_scenario(cls.db, session.id, 1, sc.ScenarioInput(
+            "Checkout", "Open shop\nPay for one item", "The order is placed", "Card: test card"))
         smoke = sc.add_smoke_page(cls.db, session.id, 1, sc.SmokePageInput("Cart page", "https://shop.example.com/cart"))
         with cls.db.Session.begin() as orm:
             steps = [
@@ -283,3 +284,38 @@ class SettingsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScenarioStepsInReportsTests(ExportTests):
+    """Phase 11: every format shows the scenario's steps and expected result."""
+
+    def test_model(self):
+        (info,) = self.report.scenarios  # the smoke page is not a scenario
+        self.assertEqual((info.name, info.steps, info.expected_result, info.test_data),
+                         ("Checkout", ["Open shop", "Pay for one item"], "The order is placed", "Card: test card"))
+        self.assertEqual(info.numbered_steps(), "1. Open shop\n2. Pay for one item")
+
+    def test_markdown_lists_steps_and_expected_under_the_test_case(self):
+        text = export_report(self.db, self.session_id, self.base / "steps" / "r.md").read_text("utf-8")
+        self.assertIn("### Test Case 001: Checkout\n\n**Steps:**\n1. Open shop\n2. Pay for one item\n\n"
+                      "**Expected result:** The order is placed\n\n**Test data:** Card: test card\n\n| Test Step", text)
+
+    def test_excel_summary_has_scenarios_table(self):
+        from openpyxl import load_workbook
+        ws = load_workbook(export_report(self.db, self.session_id, self.base / "steps" / "r.xlsx"))["Summary"]
+        values = [[c.value for c in row] for row in ws.iter_rows()]
+        header = next(i for i, r in enumerate(values) if r[:5] == ["Batch", "Scenario", "Steps", "Expected result", "Test data"])
+        self.assertEqual(values[header + 1][:5],
+                         [1, "Checkout", "1. Open shop\n2. Pay for one item", "The order is placed", "Card: test card"])
+
+    def test_word_and_pdf_have_scenarios_section(self):
+        from docx import Document
+        doc = Document(str(export_report(self.db, self.session_id, self.base / "steps" / "r.docx")))
+        self.assertIn("Scenarios", [p.text for p in doc.paragraphs])
+        cells = [c.text for t in doc.tables for row in t.rows for c in row.cells]
+        self.assertIn("1. Open shop\n2. Pay for one item", cells)
+        self.assertIn("The order is placed", cells)
+        from wta.export.html import report_html
+        html = report_html(self.report)
+        self.assertIn("<h2>Scenarios</h2>", html)
+        self.assertIn("1. Open shop<br>2. Pay for one item", html)

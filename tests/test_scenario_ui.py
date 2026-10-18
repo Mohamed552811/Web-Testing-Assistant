@@ -142,3 +142,22 @@ class ScenarioTabTests(Fixture):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScenarioDialogTests(unittest.TestCase):
+    """Phase 11: the scenario window has Steps and Expected result."""
+
+    def test_new_scenario_numbers_steps(self):
+        from wta.scenario_dialogs import ScenarioDialog
+        dialog = ScenarioDialog()
+        self.assertFalse(hasattr(dialog, "goal"))
+        dialog.name.setText("Price list")
+        dialog.steps.setPlainText("Open Orders\n\nClick + Order")
+        dialog.expected_result.setPlainText("Rate shows 4.30")
+        dialog.accept()
+        self.assertEqual(dialog.data(), sc.ScenarioInput("Price list", "1. Open Orders\n2. Click + Order", "Rate shows 4.30", ""))
+        edit = ScenarioDialog(None, dialog.data())
+        self.assertEqual(edit.steps.toPlainText(), "1. Open Orders\n2. Click + Order")
+        self.assertEqual(edit.expected_result.toPlainText(), "Rate shows 4.30")
+        dialog.deleteLater()
+        edit.deleteLater()

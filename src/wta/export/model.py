@@ -13,6 +13,7 @@ from pathlib import Path
 
 from wta.db import Database, store
 from wta.db import runs as run_store
+from wta.db.scenarios import step_lines
 from wta.db.models import ReviewDecision, ScenarioKind, Step, StepStatus
 from wta.step_table import PENDING, RERUN, SMOKE_LABELS, STATUS_LABELS
 
@@ -79,6 +80,21 @@ class BugRow:
 
 
 @dataclass
+class ScenarioInfo:
+    """What the user asked for in one scenario: its steps and expected result."""
+
+    kind: str
+    batch: int
+    name: str
+    steps: list[str]
+    expected_result: str
+    test_data: str
+
+    def numbered_steps(self) -> str:
+        return "\n".join(f"{i}. {s}" for i, s in enumerate(self.steps, start=1))
+
+
+@dataclass
 class Report:
     session_name: str
     target_url: str
@@ -89,6 +105,7 @@ class Report:
     exported_at: str
     rows: list[StepRow]
     bugs: list[BugRow]
+    scenarios: list[ScenarioInfo] = field(default_factory=list)  # scenarios only, not smoke pages
     counts: dict[str, Counter] = field(default_factory=dict)  # kind label -> final_key -> n
     application: str = ""
     test_scope: list[str] = field(default_factory=list)
@@ -144,11 +161,15 @@ def _redact_rows(items: list, replacements: list[tuple[str, str]]) -> None:
 def build_report(db: Database, session_id: int, tester: str = "") -> Report:
     session = store.load_session(db, session_id)
     rows: list[StepRow] = []
+    scenarios: list[ScenarioInfo] = []
     bugs: list[BugRow] = []
     counts: dict[str, Counter] = {}
     ordered = sorted(session.scenarios, key=lambda s: (s.kind != ScenarioKind.SCENARIO, s.batch_number, s.position))
     for scenario in ordered:
         kind = KIND_LABELS[scenario.kind]
+        if scenario.kind == ScenarioKind.SCENARIO:
+            scenarios.append(ScenarioInfo(kind, scenario.batch_number, scenario.name, step_lines(scenario.test_steps),
+                                          scenario.expected_result or "", scenario.test_data or ""))
         labels = SMOKE_LABELS if scenario.kind == ScenarioKind.SMOKE else STATUS_LABELS
         counter = counts.setdefault(kind, Counter())
         for step in scenario.steps:
@@ -181,7 +202,7 @@ def build_report(db: Database, session_id: int, tester: str = "") -> Report:
                 ))
 
     replacements = [(session.test_account_password, PASSWORD_PLACEHOLDER)] if session.test_account_password else []
-    _redact_rows(rows + bugs, replacements)
+    _redact_rows(rows + bugs + scenarios, replacements)
 
     runs = run_store.list_runs(db, session_id)
     latest = next((r for r in runs if r.five_hour_seen is not None), None)
@@ -194,6 +215,7 @@ def build_report(db: Database, session_id: int, tester: str = "") -> Report:
         created_at=_local(session.created_at),
         exported_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
         rows=rows,
+        scenarios=scenarios,
         bugs=bugs,
         counts=counts,
         run_count=len(runs),

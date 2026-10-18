@@ -64,6 +64,13 @@ def write_docx(report: Report, path: Path) -> Path:
         for kind, counter in report.counts.items()
     ])
 
+    if report.scenarios:
+        doc.add_heading("Scenarios", level=1)
+        _table(doc, ("Batch", "Scenario", "Steps", "Expected result", "Test data"), [
+            (info.batch, info.name, info.numbered_steps(), info.expected_result, info.test_data)
+            for info in report.scenarios
+        ])
+
     doc.add_heading("Results", level=1)
     table = _table(doc, RESULT_HEADERS, [
         (f"{s.kind} {s.batch}", s.scenario, s.order, s.action, s.expected, s.actual, s.claude_status,

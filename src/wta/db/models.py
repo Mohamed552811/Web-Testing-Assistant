@@ -119,7 +119,10 @@ class Scenario(Base):
     position: Mapped[int] = mapped_column(Integer)
     kind: Mapped[ScenarioKind] = mapped_column(_enum(ScenarioKind, "scenario_kind"), default=ScenarioKind.SCENARIO)
     name: Mapped[str] = mapped_column(String(200))
-    goal: Mapped[str] = mapped_column(Text, default="")
+    goal: Mapped[str] = mapped_column(Text, default="")  # smoke tests: page description; scenarios: legacy
+    # The steps the user wrote, one per line ("1. ...\n2. ..."). Not `steps`: that is Claude's step results.
+    test_steps: Mapped[str | None] = mapped_column(Text)
+    expected_result: Mapped[str | None] = mapped_column(Text)  # what must be true after the steps
     test_data: Mapped[str] = mapped_column(Text, default="")
 
     session: Mapped[TestSession] = relationship(back_populates="scenarios")

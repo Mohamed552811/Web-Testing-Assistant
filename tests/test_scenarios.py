@@ -44,9 +44,47 @@ class ScenarioStoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self._scenario("   ")
         s = self._scenario("old")
-        sc.update_scenario(self.db, s.id, sc.ScenarioInput(name=" new ", goal=" g ", test_data="d"))
+        sc.update_scenario(self.db, s.id, sc.ScenarioInput(name=" new ", steps=" g ", expected_result=" done ",
+                                                           test_data="d"))
         (loaded,) = sc.batch_scenarios(self.db, self.session.id, 1)
-        self.assertEqual((loaded.name, loaded.goal, loaded.test_data), ("new", "g", "d"))
+        self.assertEqual((loaded.name, loaded.test_steps, loaded.expected_result, loaded.test_data),
+                         ("new", "1. g", "done", "d"))
+        self.assertEqual(sc.ScenarioInput.of(loaded), sc.ScenarioInput("new", "1. g", "done", "d"))
+
+    def test_steps_are_numbered_whatever_was_typed(self):
+        typed = "Open the Orders page\n\n2) Click + Order\n  3. Expand Header\n- Pick the price list\nStep 9: Save"
+        self.assertEqual(sc.numbered_steps(typed),
+                         "1. Open the Orders page\n2. Click + Order\n3. Expand Header\n4. Pick the price list\n5. Save")
+        self.assertEqual(sc.step_lines("1. a\n2. b"), ["a", "b"])
+        self.assertEqual(sc.numbered_steps(""), "")
+        # Typing over existing numbers renumbers instead of doubling them.
+        self.assertEqual(sc.numbered_steps(sc.numbered_steps("x\ny") + "\nz"), "1. x\n2. y\n3. z")
+
+    def test_old_goal_becomes_steps_on_upgrade(self):
+        import sqlite3
+        path = Path(self.tmp.name) / "old.sqlite3"
+        old = Database(path)
+        old.close()
+        con = sqlite3.connect(path)  # simulate a database from before Phase 11
+        con.execute("ALTER TABLE scenario DROP COLUMN test_steps")
+        con.execute("ALTER TABLE scenario DROP COLUMN expected_result")
+        con.execute("INSERT INTO test_session (id, name, target_url, allowed_domains, created_at, viewport_width, "
+                    "viewport_height) VALUES (1, 'S', 'https://a', '[]', '2026-01-01', 1280, 800)")
+        con.execute("INSERT INTO scenario (session_id, batch_number, position, kind, name, goal, test_data) "
+                    "VALUES (1, 1, 1, 'scenario', 'Old', 'Log in and check the menu', '')")
+        con.execute("INSERT INTO scenario (session_id, batch_number, position, kind, name, goal, test_data) "
+                    "VALUES (1, 1, 1, 'smoke', 'Page', 'Smoke test of https://a', '')")
+        con.commit()
+        con.close()
+        upgraded = Database(path)
+        try:
+            self.assertIn("scenario.test_steps", upgraded.upgraded_columns)
+            (scenario,) = sc.batch_scenarios(upgraded, 1, 1)
+            self.assertEqual(scenario.test_steps, "Log in and check the menu")  # the old goal, kept as steps
+            (smoke,) = sc.batch_scenarios(upgraded, 1, 1, sc.ScenarioKind.SMOKE)
+            self.assertIsNone(smoke.test_steps)  # smoke pages keep their description in goal
+        finally:
+            upgraded.close()
 
     def test_next_batch_requires_full_review(self):
         self.assertEqual(sc.next_batch_number(self.db, self.session.id), 1)

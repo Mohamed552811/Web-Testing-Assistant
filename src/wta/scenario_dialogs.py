@@ -40,13 +40,22 @@ class ScenarioDialog(QDialog):
         self._result: ScenarioInput | None = None
 
         self.name = QLineEdit(placeholderText="e.g. Add a product to the cart and check out")
-        self.goal = _text_box("What should happen, in plain language", 110)
+        self.steps = _text_box(
+            "One step per line, in order. Numbers are added for you, e.g.\n"
+            "Open the Orders page\nClick + Order\nSelect the price list 'strawberry export pl 2'", 130)
+        self.expected_result = _text_box(
+            "What must be true after the last step, e.g. the exchange rate shows 1 JOD = 4.30 AED", 70)
         self.test_data = _text_box("Values to use, e.g. product name, quantity, coupon code")
+        hint = QLabel("Claude follows the steps in order and judges Pass or Fail against the expected result.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: gray;")
 
         form = QFormLayout()
         form.addRow("Name", self.name)
-        form.addRow("Goal", self.goal)
+        form.addRow("Steps", self.steps)
+        form.addRow("Expected result", self.expected_result)
         form.addRow("Test data", self.test_data)
+        form.addRow("", hint)
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
@@ -54,11 +63,13 @@ class ScenarioDialog(QDialog):
 
         if data:
             self.name.setText(data.name)
-            self.goal.setPlainText(data.goal)
+            self.steps.setPlainText(data.steps)
+            self.expected_result.setPlainText(data.expected_result)
             self.test_data.setPlainText(data.test_data)
 
     def accept(self) -> None:
-        data = ScenarioInput(self.name.text(), self.goal.toPlainText(), self.test_data.toPlainText())
+        data = ScenarioInput(self.name.text(), self.steps.toPlainText(), self.expected_result.toPlainText(),
+                             self.test_data.toPlainText())
         try:
             self._result = data.cleaned()
         except ValueError as exc:

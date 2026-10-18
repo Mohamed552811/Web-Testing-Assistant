@@ -1,5 +1,6 @@
 """Batches, scenarios, steps and reviews within a test session."""
 
+import re
 from dataclasses import dataclass
 
 from sqlalchemy import func, select
@@ -20,17 +21,42 @@ from wta.db.models import (
 )
 
 
+_STEP_NUMBER = re.compile(r"^\s*(?:step\s*)?\d+\s*[.):-]\s*", re.IGNORECASE)
+_BULLET = re.compile(r"^\s*[-*•]\s+")
+
+
+def step_lines(text: str | None) -> list[str]:
+    """The steps as a plain list: one per non-empty line, any numbering or bullet removed."""
+    lines = []
+    for line in (text or "").splitlines():
+        line = _BULLET.sub("", _STEP_NUMBER.sub("", line)).strip()
+        if line:
+            lines.append(line)
+    return lines
+
+
+def numbered_steps(text: str | None) -> str:
+    """Steps renumbered 1., 2., … whatever numbering (or none) they were typed with."""
+    return "\n".join(f"{i}. {line}" for i, line in enumerate(step_lines(text), start=1))
+
+
 @dataclass
 class ScenarioInput:
     name: str
-    goal: str = ""
+    steps: str = ""
+    expected_result: str = ""
     test_data: str = ""
 
     def cleaned(self) -> "ScenarioInput":
         name = self.name.strip()
         if not name:
             raise ValueError("Scenario name is required.")
-        return ScenarioInput(name=name, goal=self.goal.strip(), test_data=self.test_data.strip())
+        return ScenarioInput(name=name, steps=numbered_steps(self.steps),
+                             expected_result=self.expected_result.strip(), test_data=self.test_data.strip())
+
+    @classmethod
+    def of(cls, scenario: Scenario) -> "ScenarioInput":
+        return cls(scenario.name, scenario.test_steps or "", scenario.expected_result or "", scenario.test_data)
 
 
 @dataclass
@@ -153,7 +179,8 @@ def add_scenario(
         _get(orm, TestSession, session_id)
         scenario = Scenario(
             session_id=session_id, batch_number=batch, position=_next_position(orm, session_id, batch, kind),
-            kind=kind, name=data.name, goal=data.goal, test_data=data.test_data,
+            kind=kind, name=data.name, test_steps=data.steps or None, expected_result=data.expected_result or None,
+            test_data=data.test_data,
         )
         orm.add(scenario)
     return scenario
@@ -163,7 +190,8 @@ def update_scenario(db: Database, scenario_id: int, data: ScenarioInput) -> Scen
     data = data.cleaned()
     with db.Session.begin() as orm:
         scenario = _get(orm, Scenario, scenario_id)
-        scenario.name, scenario.goal, scenario.test_data = data.name, data.goal, data.test_data
+        scenario.name, scenario.test_data = data.name, data.test_data
+        scenario.test_steps, scenario.expected_result = data.steps or None, data.expected_result or None
     return scenario
 
 

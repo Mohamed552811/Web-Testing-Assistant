@@ -172,12 +172,20 @@ def write_markdown(report: Report, path: Path) -> Path:
         "",
     ]
     cases = [list(rows) for _, rows in groupby(report.rows, key=lambda r: (r.kind, r.batch, r.scenario))]
+    asked = {(s.kind, s.batch, s.name): s for s in report.scenarios}  # the user's steps and expected result
     for number, rows in enumerate(cases, start=1):
         first = rows[0]
         label = "Smoke Test" if first.kind == "Smoke test" else "Test Case"
+        lines += [f"### {label} {number:03d}: {first.scenario}", ""]
+        info = asked.get((first.kind, first.batch, first.scenario))
+        if info is not None:
+            if info.steps:
+                lines += ["**Steps:**", *[f"{i}. {s}" for i, s in enumerate(info.steps, start=1)], ""]
+            if info.expected_result:
+                lines += [f"**Expected result:** {info.expected_result}", ""]
+            if info.test_data:
+                lines += [f"**Test data:** {info.test_data}", ""]
         lines += [
-            f"### {label} {number:03d}: {first.scenario}",
-            "",
             "| Test Step | Expected Result | Actual Result | Status |",
             "|-----------|-----------------|---------------|--------|",
             *[f"| {_cell(r.action)} | {_cell(r.expected)} | {_cell(r.actual)} | {step_status(r)} |" for r in rows],
