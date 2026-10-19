@@ -28,17 +28,23 @@ class Palette:
     selection: str
     selection_text: str
     header: str
+    badge_ok: str  # Launchpad status badges ("Ready" / "Setup required")
+    badge_ok_text: str
+    badge_warn: str
+    badge_warn_text: str
 
 
 LIGHT = Palette(
     window="#f4f5f7", panel="#ffffff", base="#ffffff", alt="#f6f7f9", text="#1f2933", muted="#5f6b76",
     border="#d3d8de", accent="#9B2D20", accent_hover="#B23A2A", accent_text="#ffffff",
     selection="#f2d6d1", selection_text="#1f2933", header="#eceef2",
+    badge_ok="#dcf2e3", badge_ok_text="#1d6b3a", badge_warn="#fbeccb", badge_warn_text="#7a4b00",
 )
 DARK = Palette(
     window="#16181b", panel="#1e2125", base="#1a1d21", alt="#212429", text="#e6e8eb", muted="#9aa3ad",
     border="#363b42", accent="#C8553D", accent_hover="#D96A52", accent_text="#ffffff",
     selection="#4d2a23", selection_text="#f3f4f6", header="#262a30",
+    badge_ok="#1d3b28", badge_ok_text="#8fdcaa", badge_warn="#44351a", badge_warn_text="#f2c46d",
 )
 
 _current: Palette = LIGHT
@@ -57,6 +63,9 @@ def resolve(mode: str) -> Palette:
         return LIGHT
     scheme = QGuiApplication.styleHints().colorScheme()
     return DARK if scheme == Qt.ColorScheme.Dark else LIGHT
+
+
+_BADGE = "border-radius: 9px; padding: 3px 10px; font-weight: 600; font-size: 8.5pt;"
 
 
 def stylesheet(p: Palette) -> str:
@@ -103,6 +112,15 @@ def stylesheet(p: Palette) -> str:
     QToolButton[chip="true"]:checked {{ background: {p.accent}; color: {p.accent_text}; border-color: {p.accent};
                   font-weight: 600; }}
     QLabel[heading="true"] {{ font-size: 16pt; font-weight: 600; color: {p.text}; }}
+    QPushButton[card="true"] {{ background: {p.panel}; border: 1px solid {p.border}; border-radius: 10px;
+                  padding: 0; text-align: left; }}
+    QPushButton[card="true"]:hover, QPushButton[card="true"]:focus {{ border: 2px solid {p.accent}; }}
+    QPushButton[card="true"]:pressed {{ background: {p.alt}; }}
+    QLabel[cardTitle="true"] {{ font-size: 13pt; font-weight: 600; color: {p.text}; }}
+    QLabel[badge="ok"] {{ background: {p.badge_ok}; color: {p.badge_ok_text}; {_BADGE} }}
+    QLabel[badge="warn"] {{ background: {p.badge_warn}; color: {p.badge_warn_text}; {_BADGE} }}
+    QLabel[badge="info"] {{ background: {p.header}; color: {p.text}; {_BADGE} }}
+    QToolButton[modeSwitcher="true"] {{ font-weight: 600; }}
     QScrollBar:vertical {{ background: transparent; width: 10px; }}
     QScrollBar::handle:vertical {{ background: {p.border}; border-radius: 5px; min-height: 24px; }}
     QScrollBar:horizontal {{ background: transparent; height: 10px; }}

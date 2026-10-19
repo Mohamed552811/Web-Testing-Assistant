@@ -16,9 +16,11 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QSizePolicy,
     QSplitter,
+    QMenu,
     QStackedWidget,
     QTabWidget,
     QToolBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -26,6 +28,8 @@ from PySide6.QtWidgets import (
 from wta import __version__
 from wta import accessibility, cdp, compare, cost, fixtures, housekeeping, icons, test_data, theme
 from wta import settings as app_settings
+from wta import launchpad as modes
+from wta.designer.setup_page import DesignerSetupPage, DesignerWorkspace
 from wta.welcome import AboutDialog, WelcomePage
 from wta.housekeeping_dialog import HousekeepingDialog
 from wta.search_dialog import SearchDialog
@@ -163,20 +167,39 @@ class MainWindow(QMainWindow):
         splitter.setSizes([850, 750])
         self.splitter = splitter
 
+        # Pages: the Launchpad first, then the mode's workspace (Smoke and Regression share the splitter).
+        self.mode: str | None = None
+        self.launchpad = modes.Launchpad(self)
+        self.launchpad.mode_chosen.connect(self.set_mode)
+        self.launchpad.continue_requested.connect(self.continue_last_mode)
+        self.designer_setup = DesignerSetupPage(self)
+        self.designer_setup.upload_requested.connect(self.upload_workbook)
+        self.designer_setup.workspace_requested.connect(self.open_designer_workspace)
+        self.designer_workspace = DesignerWorkspace(self)
+        self.designer_workspace.change_workbook_requested.connect(
+            lambda: self.pages.setCurrentWidget(self.designer_setup))
+        self.pages = QStackedWidget()
+        for page in (self.launchpad, self.designer_setup, self.designer_workspace, splitter):
+            self.pages.addWidget(page)
+
         central = QWidget()
         layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.top_bar)
-        layout.addWidget(splitter, 1)
+        layout.addWidget(self.pages, 1)
         self.setCentralWidget(central)
 
         self._build_menu()
+        self._build_mode_bar()
         self._build_toolbar()
         self._apply_button_icons()
         self._update_title()
         self._update_run_state()
         self._restore_ui_state()
+        self._sign_in_known = False
+        self.top_bar.sign_in_changed.connect(self._update_mode_badges)
+        self.show_launchpad()
         if cdp_port is not None:
             QTimer.singleShot(1000, self._check_cdp)
         if check_sign_in:
@@ -261,6 +284,112 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.close_all_action)
         self.addToolBar(toolbar)
         self.toolbar = toolbar
+
+    # --- modes and the Launchpad ---------------------------------------------------
+
+    def _build_mode_bar(self) -> None:
+        """The mode switcher: current mode with a dropdown of the others, plus Back to Launchpad.
+        The same menu is in the menu bar (Alt+M) for the keyboard."""
+        menu = QMenu("&Mode", self)
+        self.mode_actions: dict[str, QAction] = {}
+        for mode, label in modes.MODES.items():
+            action = QAction(label, self, checkable=True)
+            action.triggered.connect(lambda _checked=False, m=mode: self.set_mode(m))
+            icons.set_icon(action, modes.MODE_ICONS[mode])
+            menu.addAction(action)
+            self.mode_actions[mode] = action
+        menu.addSeparator()
+        self.launchpad_action = QAction("&Back to Launchpad", self, shortcut=QKeySequence("Ctrl+L"))
+        self.launchpad_action.triggered.connect(self.show_launchpad)
+        icons.set_icon(self.launchpad_action, "arrow-left")
+        menu.addAction(self.launchpad_action)
+        self.menuBar().insertMenu(self.menuBar().actions()[0], menu)
+        self.mode_menu = menu
+
+        self.mode_button = QToolButton(self)
+        self.mode_button.setProperty("modeSwitcher", True)
+        self.mode_button.setMenu(menu)
+        self.mode_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.mode_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.mode_button.setToolTip("Switch mode")
+        self.mode_button.setAccessibleName("Mode")
+        back = QToolButton(self)
+        back.setDefaultAction(self.launchpad_action)
+        back.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        back.setText("Launchpad")
+        bar = QToolBar("Mode", self)
+        bar.setObjectName("mode-toolbar")
+        bar.setMovable(False)
+        bar.setIconSize(QSize(18, 18))
+        bar.addWidget(back)
+        bar.addWidget(self.mode_button)
+        self.addToolBar(bar)
+        self.mode_bar = bar
+
+    def show_launchpad(self) -> None:
+        self.pages.setCurrentWidget(self.launchpad)
+        self.mode_bar.hide()
+        self.toolbar.hide()
+        self.launchpad.set_last_mode(self.last_mode())
+        self._update_mode_badges()
+        self.launchpad.cards[modes.DESIGN].setFocus()
+
+    def last_mode(self) -> str | None:
+        mode = self._ui_state().value("mode")
+        return mode if mode in modes.MODES else None
+
+    def set_mode(self, mode: str) -> None:
+        """Enter a mode. Smoke and Regression open their tab (with the session picker until a session is
+        open); Test Case Design opens its setup step."""
+        if mode not in modes.MODES:
+            return
+        self.mode = mode
+        state = self._ui_state()
+        state.setValue("mode", mode)
+        state.sync()
+        for key, action in self.mode_actions.items():
+            action.setChecked(key == mode)
+        self.mode_button.setText(modes.MODES[mode])
+        icons.set_icon(self.mode_button, modes.MODE_ICONS[mode], "accent")
+        self.mode_bar.show()
+        testing = mode in (modes.REGRESSION, modes.SMOKE)
+        self.toolbar.setVisible(testing)
+        if testing:
+            self.pages.setCurrentWidget(self.splitter)
+            self.tabs.setCurrentWidget(self.smoke_tab if mode == modes.SMOKE else self.scenario_tab)
+        else:
+            self.pages.setCurrentWidget(self.designer_setup)
+
+    def continue_last_mode(self) -> None:
+        """Launchpad "Continue where you left off": the last mode, and its last session for Smoke/Regression."""
+        mode = self.last_mode()
+        if mode is None:
+            return
+        self.set_mode(mode)
+        if mode != modes.DESIGN and self.current_session is None:
+            self.reopen_last_session()
+
+    def _update_mode_badges(self, _ready: bool | None = None) -> None:
+        """Test Case Design needs Claude Code signed in (it generates with `claude -p`, no API key)."""
+        if _ready is not None:
+            self._sign_in_known = True
+        card = self.launchpad.cards[modes.DESIGN]
+        if not self._sign_in_known:
+            card.set_badge("Checking setup…", "info")
+        elif self.top_bar.signed_in:
+            card.set_badge("Ready", "ok")
+        else:
+            card.set_badge("Setup required", "warn")
+        card.setToolTip("" if self.top_bar.signed_in
+                        else "Claude Code must be installed and signed in (Help, Check setup).")
+
+    def upload_workbook(self, path: Path) -> None:
+        self.statusBar().showMessage(f"Workbook analysis is not available yet (milestone M1): {path.name}", 10000)
+
+    def open_designer_workspace(self, workbook_id: int) -> None:
+        item = self.designer_setup.workbooks.currentItem()
+        self.designer_workspace.set_workbook(workbook_id, item.text().split("\n")[0] if item else "")
+        self.pages.setCurrentWidget(self.designer_workspace)
 
     def _apply_button_icons(self) -> None:
         """Icons on the buttons inside the tabs and panels (re-tinted with the theme)."""
@@ -469,6 +598,8 @@ class MainWindow(QMainWindow):
         self.show_session(store.update_session(self.db, self.current_session.id, dialog.details()))
 
     def show_session(self, session: TestSession) -> None:
+        if self.mode not in (modes.REGRESSION, modes.SMOKE):  # sessions live in the testing modes
+            self.set_mode(modes.REGRESSION)
         self.current_session = session
         self._update_title()
         site = site_notes.site_for_url(session.target_url)
@@ -921,8 +1052,7 @@ def main(argv: list[str] | None = None) -> int:
     guard = NavigationGuard(app)
     profile.setUrlRequestInterceptor(guard)
     window = MainWindow(db, profile, cdp_port, guard=guard)
-    window.show()
-    window.reopen_last_session()
+    window.show()  # opens on the Launchpad; "Continue where you left off" reopens the last session
     try:
         return app.exec()
     finally:
