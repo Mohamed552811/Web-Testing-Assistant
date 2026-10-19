@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Web Testing Assistant — Documentation</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm;
+    @bottom-left { content: "Web Testing Assistant · Documentation"; font: 8pt "Segoe UI", sans-serif; color: #6B7280; }
+    @bottom-right { content: counter(page); font: 8pt "Segoe UI", sans-serif; color: #6B7280; }
+  }
+  @page :first {
+    @bottom-left { content: none; }
+    @bottom-right { content: none; }
+  }
+  :root {
+    --accent: #9B2D20; --accent-soft: #F7E7E4; --text: #1F2933; --muted: #5F6B76; --line: #D3D8DE;
+    --pass: #2E8B57; --fail: #E5484D; --blocked: #C77700; --notrun: #6B7280; --panel: #F6F7F9;
+  }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 10pt; line-height: 1.5; color: var(--text); margin: 0; }
+  h1, h2, h3 { color: var(--text); line-height: 1.25; }
+  h1 { font-size: 22pt; margin: 0 0 4mm; padding-bottom: 3mm; border-bottom: 2px solid var(--accent); break-before: page; }
+  h1 .num { color: var(--accent); margin-right: 3mm; }
+  h2 { font-size: 13.5pt; margin: 7mm 0 2mm; break-after: avoid; }
+  h2 .num { color: var(--accent); margin-right: 2mm; font-weight: 600; }
+  h3 { font-size: 11pt; margin: 5mm 0 1.5mm; break-after: avoid; }
+  p { margin: 0 0 2.5mm; }
+  ul, ol { margin: 0 0 3mm; padding-left: 6mm; }
+  li { margin-bottom: 1mm; }
+  code, kbd { font-family: Consolas, "Cascadia Mono", monospace; font-size: 8.8pt; }
+  code { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 0 1mm; }
+  kbd { background: #fff; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; padding: 0 1.2mm; }
+  pre { font-family: Consolas, monospace; font-size: 8.5pt; background: var(--panel); border: 1px solid var(--line);
+        border-radius: 4px; padding: 2.5mm 3mm; white-space: pre-wrap; break-inside: avoid; margin: 0 0 3mm; }
+  a { color: var(--accent); text-decoration: none; }
+  .lead { font-size: 11.5pt; color: var(--muted); margin-bottom: 4mm; }
+  figure { margin: 3mm 0 5mm; break-inside: avoid; text-align: center; }
+  figure img { max-width: 100%; border: 1px solid var(--line); border-radius: 4px; }
+  figure img.small { max-width: 72%; }
+  figure img.medium { max-width: 88%; }
+  figcaption { font-size: 8.5pt; color: var(--muted); margin-top: 1.5mm; }
+  figcaption b { color: var(--text); }
+  table { width: 100%; border-collapse: collapse; margin: 1mm 0 4mm; font-size: 9pt; break-inside: auto; }
+  th { background: #1F2933; color: #fff; text-align: left; font-weight: 600; padding: 1.6mm 2mm; }
+  td { border-bottom: 1px solid var(--line); padding: 1.5mm 2mm; vertical-align: top; }
+  tr { break-inside: avoid; }
+  tr:nth-child(even) td { background: #FAFBFC; }
+  td.k { white-space: nowrap; font-weight: 600; }
+  .box { border-radius: 5px; padding: 2.5mm 3.5mm; margin: 2mm 0 4mm; break-inside: avoid; border-left: 4px solid; }
+  .note { background: #EEF4FB; border-color: #3B82C4; }
+  .tip { background: #ECF7F0; border-color: var(--pass); }
+  .warn { background: #FFF6E5; border-color: var(--blocked); }
+  .box b:first-child { display: block; margin-bottom: .6mm; }
+  .badge { display: inline-block; padding: 0 2mm; border-radius: 3mm; color: #fff; font-size: 8.5pt; font-weight: 600; }
+  .b-pass { background: var(--pass); } .b-fail { background: var(--fail); } .b-blocked { background: var(--blocked); }
+  .b-notrun { background: var(--notrun); }
+  .b-pending { background: #fff; color: var(--notrun); border: 1px solid var(--notrun); }
+  .steps { counter-reset: s; list-style: none; padding-left: 0; }
+  .steps > li { counter-increment: s; position: relative; padding-left: 9mm; margin-bottom: 2.2mm; }
+  .steps > li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 6mm; height: 6mm; border-radius: 3mm;
+                        background: var(--accent); color: #fff; font-weight: 700; font-size: 8.5pt; text-align: center; line-height: 6mm; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; align-items: start; }
+  .diagram { width: 100%; height: auto; }
+
+  /* Cover */
+  .cover { height: 250mm; display: flex; flex-direction: column; justify-content: space-between; }
+  .cover .band { background: var(--accent); color: #fff; border-radius: 6mm; padding: 16mm 14mm 14mm; }
+  .cover .band img { width: 30mm; height: 30mm; background: #fff; border-radius: 6mm; padding: 2mm; }
+  .cover h1.title { border: 0; break-before: auto; color: #fff; font-size: 34pt; margin: 8mm 0 2mm; padding: 0; }
+  .cover .subtitle { font-size: 15pt; opacity: .92; }
+  .cover .meta { font-size: 10pt; color: var(--muted); line-height: 1.8; }
+  .cover .meta b { color: var(--text); }
+  .cover .what { font-size: 11.5pt; line-height: 1.6; max-width: 150mm; margin-top: 12mm; }
+
+  /* Contents */
+  .toc-title { break-before: page; }
+  .toc { list-style: none; padding: 0; margin: 0; }
+  .toc li { display: flex; align-items: baseline; margin: 0; padding: .7mm 0; }
+  .toc li.ch { font-weight: 600; margin-top: 2.2mm; font-size: 10.5pt; }
+  .toc li.sec { padding-left: 8mm; font-size: 9.5pt; color: var(--muted); }
+  .toc li .t { white-space: nowrap; }
+  .toc li .dots { flex: 1; border-bottom: 1px dotted #B9C0C7; margin: 0 2mm; transform: translateY(-1mm); }
+  .toc li .pg { min-width: 7mm; text-align: right; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ COVER -->
+<section class="cover">
+  <div class="band">
+    <img src="../images/logo.svg" alt="Web Testing Assistant logo">
+    <h1 class="title">Web Testing Assistant</h1>
+    <div class="subtitle">User and technical documentation</div>
+    <p class="what">A Windows desktop app in which Claude Code tests your web application in a built-in browser,
+      step by step, and you review every result before it counts.</p>
+  </div>
+  <div class="meta">
+    <b>Version</b> 0.1.0 &nbsp;·&nbsp; <b>Date</b> October 2026 &nbsp;·&nbsp; <b>Platform</b> Windows 10 and 11<br>
+    <b>Source</b> github.com/Mohamed552811/Web-Testing-Assistant<br>
+    All screenshots in this document were taken from the app itself, on real test runs against the local test pages
+    that ship with the project.
+  </div>
+</section>
+
+<!-- ============================================================ CONTENTS -->
+<h1 class="toc-title" id="contents">Contents</h1>
+<ol class="toc" id="toc"></ol>
+
+<!-- ============================================================ 1 -->
+<h1 id="intro"><span class="num">1</span>Introduction</h1>
+<p class="lead">Web Testing Assistant lets an AI tester do the clicking while you stay the judge.</p>
+
+<p>You describe a test in plain language: the steps to follow and the result you expect. Claude Code opens your web
+application in the app's own browser, follows the steps, checks what happens and records every step with a status,
+its reasoning, and, when something is wrong, a screenshot and a ready-to-file bug report. Nothing is final until you
+review it: you approve, override or send each step back for a re-run. Finished sessions export to Excel, Word, PDF or
+Markdown.</p>
+
+<h2 id="intro-who"><span class="num">1.1</span>Who it is for</h2>
+<ul>
+  <li><b>Manual and exploratory testers</b> who want to hand repetitive checks to an assistant and keep full control of the verdict.</li>
+  <li><b>QA leads</b> who need consistent evidence: the same steps, screenshots and bug fields on every run, ready for Azure DevOps.</li>
+  <li><b>Developers</b> who want a quick smoke test of a page or a regression check of a feature on each new build.</li>
+</ul>
+
+<h2 id="intro-features"><span class="num">1.2</span>What it can do</h2>
+<table>
+  <tr><th style="width:30%">Area</th><th>Capabilities</th></tr>
+  <tr><td class="k">Testing</td><td>Scenarios written as numbered steps with an expected result; smoke tests that check a whole page; several test accounts (roles) per session; file uploads; new tabs and print views; accessibility checks.</td></tr>
+  <tr><td class="k">Watching</td><td>A live timeline of every action and what Claude saw, with progress and a timer; a banner over the browser while Claude is in control; a Stop button that ends everything at once.</td></tr>
+  <tr><td class="k">Reviewing</td><td>Status badges, filters, step cards, screenshots with the failing element marked, editable bug reports, keyboard shortcuts, site notes for the next run.</td></tr>
+  <tr><td class="k">Evidence</td><td>Console errors, failed requests and page load times recorded by the app on every step; reports in Excel (Azure DevOps column names), Word, PDF and Markdown.</td></tr>
+  <tr><td class="k">Regression</td><td>A scenario library, import from Excel/CSV and Azure DevOps exports, test data variables, run history and comparison with the previous run of the same test, trends per site.</td></tr>
+  <tr><td class="k">Cost and safety</td><td>Runs on your Claude subscription (no API key); usage estimate and automatic pause; model per run type; allowed-domain guard; page content treated as data; test passwords kept out of every file the app writes.</td></tr>
+</table>
+
+<h2 id="intro-reading"><span class="num">1.3</span>How to read this document</h2>
+<p>Chapter 2 explains how the app works. Chapters 3 and 4 get you installed and through a first test in about ten
+minutes. Chapters 5 to 13 describe each part of the app in the order you use it. Chapters 14 to 17 cover security,
+plan usage, data and troubleshooting, and chapter 18 is for developers who build or change the app.</p>
+
+<!-- ============================================================ 2 -->
+<h1 id="how"><span class="num">2</span>How it works</h1>
+<p class="lead">Three programs work together on your computer: the app, Claude Code and Playwright MCP.</p>
+
+<h2 id="how-arch"><span class="num">2.1</span>The parts</h2>
+<figure>
+<svg class="diagram" viewBox="0 0 1000 470" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="15">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1F2933"/></marker>
+  </defs>
+  <rect x="10" y="10" width="560" height="450" rx="16" fill="#F7E7E4" stroke="#9B2D20" stroke-width="2"/>
+  <text x="30" y="42" font-size="18" font-weight="700" fill="#9B2D20">Web Testing Assistant (desktop app)</text>
+  <rect x="30" y="64" width="250" height="120" rx="10" fill="#fff" stroke="#9B2D20"/>
+  <text x="46" y="92" font-weight="700">Your workspace</text>
+  <text x="46" y="116" fill="#5F6B76">Sessions, scenarios, review,</text>
+  <text x="46" y="136" fill="#5F6B76">runs, reports, tools</text>
+  <text x="46" y="160" fill="#5F6B76">(PySide6 / Qt)</text>
+  <rect x="300" y="64" width="250" height="120" rx="10" fill="#fff" stroke="#9B2D20"/>
+  <text x="316" y="92" font-weight="700">Local database</text>
+  <text x="316" y="116" fill="#5F6B76">SQLite on this computer:</text>
+  <text x="316" y="136" fill="#5F6B76">sessions, steps, reviews,</text>
+  <text x="316" y="156" fill="#5F6B76">bugs, runs, test accounts</text>
+  <rect x="30" y="214" width="520" height="104" rx="10" fill="#fff" stroke="#9B2D20"/>
+  <text x="46" y="242" font-weight="700">Built-in browser (QtWebEngine, Chromium)</text>
+  <text x="46" y="266" fill="#5F6B76">Shows the application under test. Opens a local debugging port (CDP)</text>
+  <text x="46" y="286" fill="#5F6B76">that Playwright attaches to. A guard blocks pages outside the allowed</text>
+  <text x="46" y="306" fill="#5F6B76">domains during a run.</text>
+  <rect x="30" y="346" width="520" height="96" rx="10" fill="#fff" stroke="#9B2D20"/>
+  <text x="46" y="374" font-weight="700">Run folder (one per scenario run)</text>
+  <text x="46" y="398" fill="#5F6B76">prompt.md · mcp.json · trace.jsonl · results.json · screenshots</text>
+  <text x="46" y="420" fill="#5F6B76">The app reads results.json every second while Claude works.</text>
+  <rect x="660" y="64" width="320" height="120" rx="10" fill="#fff" stroke="#1F2933" stroke-width="1.5"/>
+  <text x="676" y="92" font-weight="700">Claude Code CLI</text>
+  <text x="676" y="116" fill="#5F6B76">claude -p, signed in with your</text>
+  <text x="676" y="136" fill="#5F6B76">Pro or Max subscription. Browser</text>
+  <text x="676" y="156" fill="#5F6B76">tools and run-folder files only.</text>
+  <rect x="660" y="214" width="320" height="104" rx="10" fill="#fff" stroke="#1F2933" stroke-width="1.5"/>
+  <text x="676" y="242" font-weight="700">Playwright MCP</text>
+  <text x="676" y="266" fill="#5F6B76">Started by Claude Code with npx</text>
+  <text x="676" y="286" fill="#5F6B76">(Node.js). Clicks, types, reads and</text>
+  <text x="676" y="306" fill="#5F6B76">screenshots the built-in browser.</text>
+  <rect x="660" y="346" width="320" height="96" rx="10" fill="#EEF4FB" stroke="#3B82C4" stroke-width="1.5"/>
+  <text x="676" y="374" font-weight="700">Claude (Anthropic)</text>
+  <text x="676" y="398" fill="#5F6B76">The model that plans and judges,</text>
+  <text x="676" y="420" fill="#5F6B76">reached by Claude Code over HTTPS.</text>
+  <line x1="571" y1="124" x2="655" y2="124" stroke="#1F2933" stroke-width="2" marker-end="url(#ar)"/>
+  <text x="590" y="114" font-size="13">prompt</text>
+  <line x1="820" y1="184" x2="820" y2="209" stroke="#1F2933" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="660" y1="266" x2="555" y2="266" stroke="#1F2933" stroke-width="2" marker-end="url(#ar)"/>
+  <text x="572" y="256" font-size="13">CDP</text>
+  <path d="M 660 168 H 615 V 394 H 557" fill="none" stroke="#1F2933" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#ar)"/>
+  <text x="621" y="334" font-size="13"><tspan x="621">writes</tspan><tspan x="621" dy="16">results</tspan></text>
+  <path d="M 940 341 L 940 189" fill="none" stroke="#3B82C4" stroke-width="2" stroke-dasharray="4 4" marker-end="url(#ar)" marker-start="url(#ar)"/>
+</svg>
+<figcaption><b>Figure 1.</b> Everything except the Claude model runs on your computer. The app starts Claude Code for each
+scenario; Claude Code drives the built-in browser through Playwright MCP and writes its results into the run folder.</figcaption>
+</figure>
+
+<p><b>The app</b> is where you work: it holds your sessions and results, shows the browser and the live run, and turns
+results into reports. <b>Claude Code</b> is Anthropic's command-line agent. The app starts it once per scenario
+(<code>claude -p</code>) and gives it a prompt that describes the test, the rules and the result format.
+<b>Playwright MCP</b> is the browser toolkit Claude Code uses: it attaches to the app's own browser over its local
+debugging port, so the page you see is the page Claude tests.</p>
+
+<div class="box note"><b>Your subscription, not an API key</b>
+Claude Code runs with your own Claude Pro or Max sign-in. The app removes <code>ANTHROPIC_API_KEY</code> from the
+environment of every Claude process, never reads or stores Claude credentials, and shows plan usage only from what
+Claude Code itself reports.</div>
+
+<h2 id="how-workflow"><span class="num">2.2</span>The testing workflow</h2>
+<figure>
+<svg class="diagram" viewBox="0 0 1000 240" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="14">
+  <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9B2D20"/></marker></defs>
+  <g>
+    <rect x="5" y="20" width="150" height="120" rx="12" fill="#fff" stroke="#9B2D20" stroke-width="2"/>
+    <circle cx="30" cy="44" r="14" fill="#9B2D20"/><text x="30" y="49" fill="#fff" font-weight="700" text-anchor="middle">1</text>
+    <text x="52" y="49" font-weight="700">Session</text>
+    <text x="18" y="76" fill="#5F6B76">Target URL, allowed</text><text x="18" y="96" fill="#5F6B76">domains, accounts,</text><text x="18" y="116" fill="#5F6B76">upload folder</text>
+  </g>
+  <g transform="translate(170,0)">
+    <rect x="5" y="20" width="150" height="120" rx="12" fill="#fff" stroke="#9B2D20" stroke-width="2"/>
+    <circle cx="30" cy="44" r="14" fill="#9B2D20"/><text x="30" y="49" fill="#fff" font-weight="700" text-anchor="middle">2</text>
+    <text x="52" y="49" font-weight="700">Tests</text>
+    <text x="18" y="76" fill="#5F6B76">Scenarios or smoke</text><text x="18" y="96" fill="#5F6B76">pages; library, import</text><text x="18" y="116" fill="#5F6B76">or suggestions</text>
+  </g>
+  <g transform="translate(340,0)">
+    <rect x="5" y="20" width="150" height="120" rx="12" fill="#fff" stroke="#9B2D20" stroke-width="2"/>
+    <circle cx="30" cy="44" r="14" fill="#9B2D20"/><text x="30" y="49" fill="#fff" font-weight="700" text-anchor="middle">3</text>
+    <text x="52" y="49" font-weight="700">Run batch</text>
+    <text x="18" y="76" fill="#5F6B76">Up to 5 per batch;</text><text x="18" y="96" fill="#5F6B76">usage estimate and</text><text x="18" y="116" fill="#5F6B76">pause limit</text>
+  </g>
+  <g transform="translate(510,0)">
+    <rect x="5" y="20" width="150" height="120" rx="12" fill="#fff" stroke="#9B2D20" stroke-width="2"/>
+    <circle cx="30" cy="44" r="14" fill="#9B2D20"/><text x="30" y="49" fill="#fff" font-weight="700" text-anchor="middle">4</text>
+    <text x="52" y="49" font-weight="700">Claude tests</text>
+    <text x="18" y="76" fill="#5F6B76">Live timeline; steps</text><text x="18" y="96" fill="#5F6B76">appear as Claude</text><text x="18" y="116" fill="#5F6B76">writes them</text>
+  </g>
+  <g transform="translate(680,0)">
+    <rect x="5" y="20" width="150" height="120" rx="12" fill="#9B2D20" stroke="#9B2D20" stroke-width="2"/>
+    <circle cx="30" cy="44" r="14" fill="#fff"/><text x="30" y="49" fill="#9B2D20" font-weight="700" text-anchor="middle">5</text>
+    <text x="52" y="49" font-weight="700" fill="#fff">You review</text>
+    <text x="18" y="76" fill="#fff">Approve, override or</text><text x="18" y="96" fill="#fff">re-run every step;</text><text x="18" y="116" fill="#fff">edit bug reports</text>
+  </g>
+  <g transform="translate(850,0)">
+    <rect x="5" y="20" width="140" height="120" rx="12" fill="#fff" stroke="#9B2D20" stroke-width="2"/>
+    <circle cx="30" cy="44" r="14" fill="#9B2D20"/><text x="30" y="49" fill="#fff" font-weight="700" text-anchor="middle">6</text>
+    <text x="52" y="49" font-weight="700">Results</text>
+    <text x="18" y="76" fill="#5F6B76">Reports, compare</text><text x="18" y="96" fill="#5F6B76">with the last build,</text><text x="18" y="116" fill="#5F6B76">trends</text>
+  </g>
+  <g stroke="#9B2D20" stroke-width="2.5" marker-end="url(#a2)">
+    <line x1="156" y1="80" x2="172" y2="80"/><line x1="326" y1="80" x2="342" y2="80"/><line x1="496" y1="80" x2="512" y2="80"/>
+    <line x1="666" y1="80" x2="682" y2="80"/><line x1="836" y1="80" x2="852" y2="80"/>
+  </g>
+  <path d="M 760 142 C 760 192, 420 192, 420 146" fill="none" stroke="#9B2D20" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#a2)"/>
+  <text x="590" y="226" text-anchor="middle" fill="#9B2D20" font-size="13">Request re-run: the scenario runs again in the next batch run</text>
+</svg>
+<figcaption><b>Figure 2.</b> A session holds batches of tests. Claude runs a batch; a step is final only after your review.</figcaption>
+</figure>
+
+<h2 id="how-run"><span class="num">2.3</span>What happens during a run</h2>
+<ol class="steps">
+  <li><b>The app prepares a run folder</b> for the scenario: the prompt (<code>prompt.md</code>, with the test password
+    replaced), the Playwright MCP configuration (<code>mcp.json</code>) and, if the session has an upload folder, a copy of its files.</li>
+  <li><b>It starts Claude Code</b> in that folder with a restricted set of tools: the Playwright browser tools and file
+    reading and writing inside the run folder. Claude Code gets no shell and does not load your own Claude Code settings or hooks.</li>
+  <li><b>Claude tests in the visible browser.</b> It takes snapshots of the page, clicks, types and waits, exactly like
+    a tester. Every action, every note and everything Claude saw streams into the <i>Live run</i> tab and into
+    <code>trace.jsonl</code>.</li>
+  <li><b>After every step Claude rewrites <code>results.json</code></b> with all steps so far. The app reads the file every
+    second, so steps, statuses, screenshots and bug reports appear on the Scenarios tab while the run is still going.</li>
+  <li><b>The app watches the page itself</b> over its own read-only debugging connection: console errors, failed
+    requests and page load times are recorded for every step, at no cost to your plan.</li>
+  <li><b>When the run ends</b> the app keeps that run's steps as history, removes the test password from Claude Code's
+    saved session, compares the result with the previous run of the same test and, for smoke tests, measures text contrast on the page.</li>
+</ol>
+
+<h2 id="how-status"><span class="num">2.4</span>Statuses</h2>
+<table>
+  <tr><th style="width:24%">Status</th><th>Meaning</th></tr>
+  <tr><td><span class="badge b-pass">Pass</span></td><td>The step worked as expected.</td></tr>
+  <tr><td><span class="badge b-fail">Fail</span> / <span class="badge b-fail">Bug</span></td><td>A product defect. Every Fail step comes with a bug report (title, severity, priority, repro steps, expected, actual). Smoke tests call it <i>Bug</i>.</td></tr>
+  <tr><td><span class="badge b-blocked">Blocked</span></td><td>Could not be checked: a captcha, a page outside the allowed domains, the environment down, missing data.</td></tr>
+  <tr><td><span class="badge b-notrun">Not run</span></td><td>Planned but not reached.</td></tr>
+  <tr><td><span class="badge b-pending">Pending review</span></td><td>Claude's status is there, but you have not reviewed the step yet; it is not final.</td></tr>
+</table>
+<p>Every step has two statuses: <b>Claude's status</b>, as Claude reported it, and the <b>final status</b>, which is
+set only by your review. Reports use the final status and show Claude's next to it.</p>
+
+<!-- ============================================================ 3 -->
+<h1 id="install"><span class="num">3</span>Installing</h1>
+<p class="lead">Install two prerequisites once, then run the Setup program.</p>
+
+<h2 id="install-req"><span class="num">3.1</span>Requirements</h2>
+<table>
+  <tr><th style="width:28%">What</th><th>Details</th></tr>
+  <tr><td class="k">Windows</td><td>Windows 10 or 11, 64-bit. About 600 MB of disk space for the app.</td></tr>
+  <tr><td class="k">Node.js 18 or later</td><td>Runs Playwright MCP (the browser tools). Install the LTS version from <a href="https://nodejs.org/en/download">nodejs.org/en/download</a>.</td></tr>
+  <tr><td class="k">Claude Code</td><td>Signed in with a Claude <b>Pro or Max</b> subscription. In PowerShell: <code>irm https://claude.ai/install.ps1 | iex</code>, then open a new terminal and run <code>claude</code> once to sign in. Details: <a href="https://code.claude.com/docs/en/setup">code.claude.com/docs/en/setup</a>.</td></tr>
+  <tr><td class="k">Internet</td><td>Claude Code needs to reach Anthropic. The application you test can be local (for example <code>localhost</code>) or online.</td></tr>
+</table>
+
+<h2 id="install-setup"><span class="num">3.2</span>Install with Setup.exe</h2>
+<ol class="steps">
+  <li>Download <b>WebTestingAssistant-Setup-0.1.0.exe</b> from the project's GitHub <i>Releases</i> page (or get it from whoever built it).</li>
+  <li>Double-click it. If Windows SmartScreen warns you, choose <b>More info → Run anyway</b>: the installer is not code-signed.</li>
+  <li>Click through the wizard. It installs for your user without administrator rights (an all-users install is offered).
+      Tick <i>Create a desktop shortcut</i> if you want one.</li>
+  <li>Click <b>Finish</b> to start the app, or open <b>Web Testing Assistant</b> from the Start menu later.</li>
+</ol>
+
+<h2 id="install-first"><span class="num">3.3</span>First start: the setup check</h2>
+<p>On start the app checks that Node.js is installed and that Claude Code is installed and signed in. If something is
+missing, the <b>Check setup</b> window opens once and says exactly what to do; after fixing it, click <b>Check again</b>.
+You can open it any time from <b>Help → Check setup</b>. Until both are ready, Run batch stays disabled and its tooltip says why.</p>
+<figure><img class="medium" src="../images/15-setup-check.png" alt="">
+<figcaption><b>Figure 3.</b> The setup check on a computer where Node.js is missing.</figcaption></figure>
+<p>The top bar shows a green dot and <i>Claude Code signed in</i> when everything is ready.</p>
+
+<h2 id="install-update"><span class="num">3.4</span>Updating and uninstalling</h2>
+<ul>
+  <li><b>Update:</b> run a newer Setup.exe over the installed version. It closes a running copy first and keeps your data.</li>
+  <li><b>Uninstall:</b> <i>Settings → Apps → Installed apps → Web Testing Assistant → Uninstall</i>. Your sessions, runs,
+      settings and backups stay in <code>%APPDATA%\Web Testing Assistant</code> until you delete that folder yourself.</li>
+</ul>
+<div class="box tip"><b>Running from source instead</b>
+Developers can run the app from the repository with Python 3.12: see chapter 18.</div>
+
+<!-- ============================================================ 4 -->
+<h1 id="quick"><span class="num">4</span>Quick start</h1>
+<p class="lead">From an empty app to a reviewed test in about ten minutes.</p>
+<ol class="steps">
+  <li><b>Create a session.</b> <i>Session → New session</i> (<kbd>Ctrl</kbd>+<kbd>N</kbd>). Enter a name, the target URL
+      (for example your test environment's login page) and a test account. The target's host is always allowed; add other
+      domains the test may visit. Click <b>Save</b>: the browser opens the target URL.</li>
+  <li><b>Add a scenario.</b> On the <b>Scenarios</b> tab click <b>Add scenario…</b>. Write the steps one per line, and the
+      expected result the test must reach. Example:
+<pre>Steps:            Sign in with the test account
+                  Click Profile in the header
+                  Replace the display name with {{random_name}}
+                  Click Save
+Expected result:  The confirmation reads 'Profile saved. Display name: {{random_name}}'</pre></li>
+  <li><b>Run it.</b> Click <b>Run batch</b> (<kbd>F5</kbd>). The app switches to <b>Live run</b>; an amber banner over the
+      browser shows that Claude is in control. Don't click in the page until the run ends.</li>
+  <li><b>Review.</b> When Windows notifies you that the run finished, go back to <b>Scenarios</b>. Select each step and press
+      <kbd>A</kbd> to approve Claude's status, or choose another final status and press <kbd>O</kbd> to override it.</li>
+  <li><b>Export.</b> <i>Session → Export report</i> (<kbd>Ctrl</kbd>+<kbd>E</kbd>) writes an Excel, Word, PDF or Markdown report.</li>
+</ol>
+
+<!-- ============================================================ 5 -->
+<h1 id="window"><span class="num">5</span>The main window</h1>
+<p class="lead">The browser on the left, your work on the right.</p>
+<figure><img src="../images/01-welcome.png" alt="">
+<figcaption><b>Figure 4.</b> The welcome screen. Recent sessions are one click away; the last session reopens on the next start.</figcaption></figure>
+
+<h2 id="window-parts"><span class="num">5.1</span>Parts of the window</h2>
+<table>
+  <tr><th style="width:24%">Part</th><th>What it does</th></tr>
+  <tr><td class="k">Toolbar</td><td>New session, Open session, Run batch (<kbd>F5</kbd>), Stop (<kbd>Shift</kbd>+<kbd>F5</kbd>), Export report, Settings and Close all browsers.</td></tr>
+  <tr><td class="k">Top bar</td><td>A green or red dot for Claude Code and Node.js, and the 5-hour and weekly plan usage gauges (reset times on hover). Usage is updated from what Claude Code reports during runs.</td></tr>
+  <tr><td class="k">Browser</td><td>The application under test, at the session's viewport size. You can browse it yourself between runs.</td></tr>
+  <tr><td class="k">Scenarios / Smoke test</td><td>Batches of tests, their steps and the review panel.</td></tr>
+  <tr><td class="k">Live run</td><td>The timeline of the run in progress.</td></tr>
+  <tr><td class="k">Runs</td><td>Every past run with its trace, findings, comparison and the site notes.</td></tr>
+</table>
+
+<h2 id="window-menus"><span class="num">5.2</span>Menus</h2>
+<table>
+  <tr><th style="width:24%">Menu</th><th>Items</th></tr>
+  <tr><td class="k">Session</td><td>New session, Open session, Session details, Export report, Settings, Quit.</td></tr>
+  <tr><td class="k">Browser</td><td>Claude connection (the browser's debugging endpoint and a command to connect Claude Code by hand), Close all browsers.</td></tr>
+  <tr><td class="k">Tools</td><td>Search everything, Trends, Clean up and back up.</td></tr>
+  <tr><td class="k">Help</td><td>Check setup, About Web Testing Assistant.</td></tr>
+</table>
+<p>The app follows the Windows light or dark theme by default (you can fix it in Settings); the accent colour is a dark
+brick red, and Fail/Bug statuses keep their own red.</p>
+<figure><img src="../images/06-review-dark.png" alt="">
+<figcaption><b>Figure 5.</b> The same review in the dark theme.</figcaption></figure>
+
+<!-- ============================================================ 6 -->
+<h1 id="sessions"><span class="num">6</span>Sessions</h1>
+<p class="lead">A session is one testing assignment: one application, its accounts and its rules.</p>
+<div class="two">
+<figure><img src="../images/02-session-dialog.png" alt="">
+<figcaption><b>Figure 6.</b> Session details with a second account (role) and an upload folder.</figcaption></figure>
+<div>
+<table>
+  <tr><th style="width:38%">Field</th><th>Purpose</th></tr>
+  <tr><td class="k">Name</td><td>For you; for example the build or sprint.</td></tr>
+  <tr><td class="k">Target URL</td><td>Where every run starts.</td></tr>
+  <tr><td class="k">Allowed domains</td><td>The only hosts the browser may open during a run; the target's host is always included.</td></tr>
+  <tr><td class="k">Viewport</td><td>The page size in CSS pixels (default 1280 × 800).</td></tr>
+  <tr><td class="k">Test account</td><td>Email and password of a <b>test-environment</b> account.</td></tr>
+  <tr><td class="k">Other accounts</td><td>More accounts with a role name, for example <i>Manager</i> or <i>Team B</i>.</td></tr>
+  <tr><td class="k">Upload files</td><td>A folder of files Claude may upload.</td></tr>
+  <tr><td class="k">Application, Test scope</td><td>Shown in the report's summary.</td></tr>
+</table>
+</div>
+</div>
+
+<h2 id="sessions-accounts"><span class="num">6.1</span>Test accounts and roles</h2>
+<p>Each scenario or smoke page can <b>run as</b> any account of its session (the <i>Run as</i> list appears when there is
+more than one). The prompt names the role, and Claude signs in as that user. The browser keeps its sign-in between
+scenarios, so Claude checks first and signs in only when needed; when a scenario tests signing in or out itself, it
+signs out first and follows the steps exactly.</p>
+<div class="box warn"><b>Test accounts only</b>
+Use accounts of a test environment. Account details stay in the local database on this computer. Every password of the
+session is removed from run files, Claude Code's saved sessions and reports; the account email may appear in reports.</div>
+
+<h2 id="sessions-uploads"><span class="num">6.2</span>File uploads</h2>
+<p>Without an upload folder, Claude cannot upload anything. With one, the app copies its files into each run folder
+(<code>fixtures/</code>; hidden files skipped; at most 25 MB per file and 200 MB per run) and allows the upload tool for
+those files only. The prompt lists them, so Claude can pick the right one.</p>
+
+<!-- ============================================================ 7 -->
+<h1 id="tests"><span class="num">7</span>Scenarios and smoke tests</h1>
+<p class="lead">Write tests the way you already do: steps and an expected result.</p>
+
+<h2 id="tests-scenarios"><span class="num">7.1</span>Scenarios</h2>
+<div class="two">
+<figure><img src="../images/03-scenario-dialog.png" alt="">
+<figcaption><b>Figure 7.</b> A scenario that runs as the Manager account.</figcaption></figure>
+<div>
+<ul>
+  <li><b>Steps:</b> one per line. Numbering is added automatically. Claude follows them in order and records one step per
+      line, keeping your wording.</li>
+  <li><b>Expected result:</b> what must be true at the end. Claude records the check as its own final step:
+      <i>Pass</i> only if it is met exactly.</li>
+  <li><b>Test data:</b> values the steps need. You may use <b>variables</b> (below).</li>
+  <li><b>Run as:</b> the account to sign in with.</li>
+  <li>Leave the steps empty and Claude plans them itself from the name and the expected result.</li>
+</ul>
+</div>
+</div>
+
+<h3 id="tests-variables">Test data variables</h3>
+<p>Variables are filled in fresh for each run, with the same value everywhere in that run, so data from earlier runs
+never clashes. The values used are listed at the top of the run's trace.</p>
+<table>
+  <tr><th style="width:30%">Variable</th><th>Example value</th></tr>
+  <tr><td><code>{{random_email}}</code></td><td>wta.kdlspq123@example.com</td></tr>
+  <tr><td><code>{{random_name}}</code></td><td>Test Gvcdk</td></tr>
+  <tr><td><code>{{random_number}}</code> · <code>{{random_text}}</code></td><td>482913 · hqzmwpxa</td></tr>
+  <tr><td><code>{{uuid}}</code></td><td>3f2b8c1e-…</td></tr>
+  <tr><td><code>{{today}}</code> · <code>{{tomorrow}}</code> · <code>{{yesterday}}</code></td><td>2026-10-19 · 2026-10-20 · 2026-10-18</td></tr>
+  <tr><td><code>{{now}}</code> · <code>{{timestamp}}</code></td><td>2026-10-19 09:05 · 20261019090512</td></tr>
+</table>
+
+<h3 id="tests-batches">Batches</h3>
+<p>A batch holds up to <b>5</b> scenarios. <b>Run batch</b> runs every scenario of the batch that has no results yet or
+whose steps you sent back for a re-run. A new batch can start once the current one is reviewed; the app asks for
+confirmation because each batch uses plan.</p>
+
+<h2 id="tests-smoke"><span class="num">7.2</span>Smoke tests</h2>
+<div class="two">
+<figure><img src="../images/04-smoke-dialog.png" alt="">
+<figcaption><b>Figure 8.</b> Describing one page for a smoke test.</figcaption></figure>
+<div>
+<p>A smoke test checks one page broadly. Describe the page: its URL, how to reach it, whether a login is needed, what
+is on it and which elements you expect. Claude first writes the whole checklist (usually 10 to 20 checks), then runs
+the checks in order: the page loads, every expected element is present and labelled, the main controls work, links
+point to the right places, there are no console errors.</p>
+<p>With <i>Include accessibility checks</i> (on by default), Claude adds checks for form labels, button and link names,
+image alt text and the main heading, and the app measures text contrast on the page after the run (chapter 10).</p>
+</div>
+</div>
+<figure><img src="../images/07-smoke.png" alt="">
+<figcaption><b>Figure 9.</b> A smoke test's checks; the selected one is an accessibility check.</figcaption></figure>
+
+<h2 id="tests-library"><span class="num">7.3</span>The library and importing test cases</h2>
+<p>Keep tests you will run again in the <b>library</b>: <b>Save to library</b> stores the selected scenario or smoke page,
+and <b>Add from library…</b> adds saved ones to the current batch, in any session. A scenario added from the library stays
+linked to it, so a run on the next build is compared with the run on the previous build (chapter 10).</p>
+<figure><img class="medium" src="../images/12-library.png" alt="">
+<figcaption><b>Figure 10.</b> The library: tick the tests to add; the batch's free places are counted.</figcaption></figure>
+<p><b>Import test cases…</b> (in the library) reads an Excel (.xlsx) or CSV file. Two layouts are recognised by their column names:</p>
+<table>
+  <tr><th style="width:28%">Layout</th><th>Columns</th></tr>
+  <tr><td class="k">One row per test case</td><td><i>Name</i> or <i>Title</i>; <i>Steps</i> (one per line); <i>Expected result</i>; <i>Test data</i>.</td></tr>
+  <tr><td class="k">Azure DevOps export</td><td>A <i>Title</i> row followed by one row per step with <i>Step Action</i> and <i>Step Expected</i>. HTML in the cells is removed; the last step's expectation becomes the expected result.</td></tr>
+</table>
+<p>A preview lists the test cases found before anything is added.</p>
+
+<h2 id="tests-suggest"><span class="num">7.4</span>Let Claude suggest scenarios</h2>
+<figure><img class="medium" src="../images/13-suggest.png" alt="">
+<figcaption><b>Figure 11.</b> Five suggestions from a short user story; tick, edit and add the ones you want.</figcaption></figure>
+<p><b>Suggest…</b> on the Scenarios tab asks Claude for 3 to 5 scenarios from a pasted user story or from the text of
+the page open in the browser. This short request gives Claude no tools at all and is not saved in Claude Code's
+history; the text is treated as data. Double-click a suggestion to edit it, then add the ticked ones to the batch,
+optionally to the library as well.</p>
+
+<!-- ============================================================ 8 -->
+<h1 id="running"><span class="num">8</span>Running tests</h1>
+<p class="lead">Press Run batch and watch Claude work.</p>
+<figure><img class="medium" src="../images/08-live-run.png" alt="">
+<figcaption><b>Figure 12.</b> A run in progress: the banner over the browser, the timeline, progress and the elapsed time.</figcaption></figure>
+
+<h2 id="running-live"><span class="num">8.1</span>The live run</h2>
+<ul>
+  <li><b>Timeline:</b> one line per note, action and result, with an icon per kind of action (navigate, click, type,
+      screenshot, file). Long output from the page is shown on one line; click it to expand.</li>
+  <li><b>Progress:</b> "Step 5 of 7 · 4 done", from the steps Claude has written so far, and the elapsed time.</li>
+  <li><b>Banner:</b> while Claude is in control, an amber banner over the browser asks you not to click in the page, and has its own Stop button.</li>
+  <li><b>Summary:</b> when a scenario ends: turns, time, tokens, the model used, plan usage, notices, what the app saw on
+      the page and what changed since the previous run.</li>
+  <li><b>Notifications:</b> Windows notifies you when a batch finishes, pauses, or Claude asks for confirmation; the taskbar button flashes.</li>
+</ul>
+
+<h2 id="running-control"><span class="num">8.2</span>Staying in control</h2>
+<table style="break-inside: avoid">
+  <tr><th style="width:28%">Control</th><th>What it does</th></tr>
+  <tr><td class="k">Stop</td><td>Ends Claude Code and everything it started at once; the steps reached so far are kept.</td></tr>
+  <tr><td class="k">Close all browsers</td><td>Stops any run and closes every process the app or Playwright started, tracked by process ID. Your own browsers are never touched.</td></tr>
+  <tr><td class="k">Allowed domains</td><td>During a run the browser refuses pages outside the session's domains; Claude marks such a step Blocked.</td></tr>
+  <tr><td class="k">Pause before risky actions</td><td>Optional (Settings, off by default). Before deleting, sending, paying or another irreversible action, Claude stops and the app asks you to allow or decline; the run then continues.</td></tr>
+  <tr><td class="k">Pause at the usage limit</td><td>Before each scenario after the first, the batch pauses and asks you once your 5-hour usage has reached the limit (80% by default).</td></tr>
+</table>
+
+<h2 id="running-pages"><span class="num">8.3</span>New tabs, pop-ups and printing</h2>
+<p>When the page opens a new tab or pop-up (a document, an invoice), it appears in its own window; Claude switches to
+it with the tabs tool, checks it and closes it. When the page prints during a run, the app saves the printout as
+<code>print-1.pdf</code> in the run folder, and Claude reads it to check it.</p>
+
+<!-- ============================================================ 9 -->
+<h1 id="review"><span class="num">9</span>Reviewing results</h1>
+<p class="lead">Nothing counts until you have looked at it.</p>
+<figure><img src="../images/05-review.png" alt="">
+<figcaption><b>Figure 13.</b> Reviewing a failed step: the browser still shows the page, the step card explains what happened, and the screenshot has the failing element marked.</figcaption></figure>
+
+<h2 id="review-panel"><span class="num">9.1</span>The review panel</h2>
+<ul>
+  <li><b>Filter chips</b> above the steps count them by status ("All steps 5 · Pass 4 · Fail 1 · To review 5"); click one to show only those steps.</li>
+  <li><b>Status badges</b> show Claude's status and the final status. Pending reviews and re-run requests are outlined.</li>
+  <li><b>Step card:</b> the screen and element, what was done, expected and actual, the page load time, Claude's status and
+      reasoning, and the review history.</li>
+  <li><b>Screenshot:</b> click the thumbnail to see it full size. For Bug and Blocked steps the app adds its own copy with
+      the failing element boxed in red, shown first.</li>
+  <li><b>Bug report:</b> every field is editable. Your version is what reports use; <i>Use Claude's version</i> brings back the original.</li>
+</ul>
+<figure><img class="small" src="../images/21-marked-screenshot.png" alt="">
+<figcaption><b>Figure 14.</b> The app's marked screenshot: Claude named the wrong confirmation message, the app boxed it.</figcaption></figure>
+
+<h2 id="review-decide"><span class="num">9.2</span>Deciding</h2>
+<table>
+  <tr><th style="width:26%">Action</th><th style="width:12%">Key</th><th>Effect</th></tr>
+  <tr><td class="k">Approve</td><td><kbd>A</kbd></td><td>Claude's status becomes the final status.</td></tr>
+  <tr><td class="k">Override</td><td><kbd>O</kbd></td><td>Sets the final status chosen in the list; Claude's status is kept next to it.</td></tr>
+  <tr><td class="k">Request re-run</td><td><kbd>R</kbd></td><td>Sends the step back; its scenario runs again on the next Run batch.</td></tr>
+  <tr><td class="k">Next / previous step</td><td><kbd>↓</kbd> <kbd>↑</kbd></td><td>Move through the steps shown by the filter.</td></tr>
+</table>
+<p>Keys work while the step table or a button has focus, never while you type. An optional comment is saved with each decision.</p>
+
+<h2 id="review-notes"><span class="num">9.3</span>Site notes</h2>
+<p><b>Save as site note</b> keeps your comment as a note for the site (the host name). Notes are added to the prompt of
+every following run on that site, for example "The coupon field needs a second click". They come from you, so Claude
+follows them; you manage them on the Runs tab.</p>
+
+<!-- ============================================================ 10 -->
+<h1 id="runs"><span class="num">10</span>Runs, history and comparison</h1>
+<p class="lead">Every run is kept: what Claude did, what it reported and what the page did.</p>
+<figure><img src="../images/09-runs-trace.png" alt="">
+<figcaption><b>Figure 15.</b> The Runs tab: past runs, the run's details and steps, its trace, and the site notes.</figcaption></figure>
+<ul>
+  <li><b>Run details:</b> outcome, start and end, plan usage, the site notes used, Claude's summary and the Claude session.</li>
+  <li><b>Steps as this run reported them:</b> each run keeps its own steps, so a re-run never erases history.</li>
+  <li><b>Trace:</b> every note, action and result, filterable and searchable.</li>
+  <li><b>Open run folder</b> and <b>Copy resume command</b>: the command reopens the run's Claude session in a terminal
+      to ask about it (Claude gets no tools there; the test password has already been removed).</li>
+</ul>
+
+<h2 id="runs-errors"><span class="num">10.1</span>Errors and speed</h2>
+<p>What the app itself saw on the page during the whole run, including steps that passed: console errors and warnings,
+uncaught JavaScript errors, failed requests (HTTP 400 and above, or failed), page load times (slow from 3 seconds) and,
+for smoke tests, low text contrast. This uses no plan.</p>
+<div class="two">
+<figure><img src="../images/10b-runs-errors-console.png" alt="">
+<figcaption><b>Figure 16.</b> A console error on a step Claude marked Pass.</figcaption></figure>
+<figure><img src="../images/10-runs-errors.png" alt="">
+<figcaption><b>Figure 17.</b> A smoke test: low contrast found by the app, and the page load time.</figcaption></figure>
+</div>
+
+<h2 id="runs-compare"><span class="num">10.2</span>Compare with the previous run</h2>
+<p>The previous run of a test is the latest earlier run of the same scenario or, for scenarios added from the library,
+of the same library item in any session: one session per build compares build with build. Steps are matched by their
+words, then by position.</p>
+<figure><img class="medium" src="../images/11-compare.png" alt="">
+<figcaption><b>Figure 18.</b> Build 2 against Build 1: one step that passed now fails.</figcaption></figure>
+<p>The live run summary shows the same comparison after each scenario, and the batch notification mentions regressions.</p>
+
+<!-- ============================================================ 11 -->
+<h1 id="reports"><span class="num">11</span>Reports</h1>
+<p class="lead">Hand results over without retyping them.</p>
+<p><i>Session → Export report</i> (<kbd>Ctrl</kbd>+<kbd>E</kbd>) exports the open session in the default format from
+Settings; choosing a file name with another extension picks that format.</p>
+<table>
+  <tr><th style="width:18%">Format</th><th>Contents</th></tr>
+  <tr><td class="k">Excel</td><td>Summary, Results and Bugs sheets with screenshots. The Bugs sheet uses Azure DevOps / TFS column names (Work Item Type, Title, Repro Steps, Severity, Priority, Tags) for import.</td></tr>
+  <tr><td class="k">Word, PDF</td><td>The same report as a document: session details, counts by status, scenarios with their steps, results, and every bug with its screenshots.</td></tr>
+  <tr><td class="k">Markdown</td><td>A folder with <code>SUMMARY.md</code> (test information, scope, results per test case, overall result, bugs found, attachments), one <code>BUG-NNN-title.md</code> per bug, and the screenshots.</td></tr>
+</table>
+<figure><img src="../images/20-report-pdf.png" alt="">
+<figcaption><b>Figure 19.</b> The first page of a PDF report.</figcaption></figure>
+<p>Reports use your final status and show Claude's next to it. A bug is left out when you reviewed its step as anything
+other than Fail; unreviewed bugs are included and labelled. Test passwords never appear; the account email may.</p>
+
+<!-- ============================================================ 12 -->
+<h1 id="tools"><span class="num">12</span>Tools</h1>
+
+<h2 id="tools-search"><span class="num">12.1</span>Search everything</h2>
+<p><i>Tools → Search everything</i> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>) searches scenarios, steps, bugs,
+site notes and the library across all sessions. Double-click a result to open its session, scenario and step.</p>
+<figure><img class="medium" src="../images/17-search.png" alt="">
+<figcaption><b>Figure 20.</b> "display name" across three build sessions.</figcaption></figure>
+
+<h2 id="tools-trends"><span class="num">12.2</span>Trends</h2>
+<p>For each site: the pass rate of runs by day and the open bugs per session (a bug is open while the step's status
+that counts is Fail).</p>
+<figure><img class="medium" src="../images/18-trends.png" alt="">
+<figcaption><b>Figure 21.</b> Pass rate by day, open bugs per build, and the numbers behind them.</figcaption></figure>
+
+<h2 id="tools-house"><span class="num">12.3</span>Clean up and back up</h2>
+<div class="two">
+<figure><img src="../images/19-housekeeping.png" alt="">
+<figcaption><b>Figure 22.</b> Disk use, old run folders and database backups.</figcaption></figure>
+<div>
+<ul>
+  <li><b>Run folders:</b> see how much disk the runs folder uses and remove folders older than a number of days. Each
+      scenario's latest run is kept by default (its screenshots back the steps you review); the run's history stays in the database.</li>
+  <li><b>Backups:</b> <b>Back up now</b> copies the database into the data folder on this computer (the latest 10 are kept).
+      <b>Restore selected</b> takes effect at the next start, after a safety backup of the current database.</li>
+</ul>
+<div class="box warn"><b>Backups stay on this computer</b>
+They contain the test accounts, which must not leave this machine.</div>
+</div>
+</div>
+
+<!-- ============================================================ 13 -->
+<h1 id="settings"><span class="num">13</span>Settings</h1>
+<div class="two">
+<figure><img src="../images/14-settings.png" alt="">
+<figcaption><b>Figure 23.</b> Session → Settings (<kbd>Ctrl</kbd>+<kbd>,</kbd>).</figcaption></figure>
+<div>
+<table>
+  <tr><th style="width:40%">Setting</th><th>Default</th></tr>
+  <tr><td class="k">Theme</td><td>Follow Windows (or Light, Dark)</td></tr>
+  <tr><td class="k">Tester name</td><td>Empty; shown as Tester in reports</td></tr>
+  <tr><td class="k">Screenshot timing</td><td>Only Blocked and Bug steps (or every step, or once per smoke page)</td></tr>
+  <tr><td class="k">Export format</td><td>Excel</td></tr>
+  <tr><td class="k">Risky actions</td><td>Off: no pause before risky actions</td></tr>
+  <tr><td class="k">Pause batch at</td><td>80% of the 5-hour window (or Never)</td></tr>
+  <tr><td class="k">Model for scenarios</td><td>Claude Code default</td></tr>
+  <tr><td class="k">Model for smoke tests</td><td>Sonnet</td></tr>
+  <tr><td class="k">Smoke tests</td><td>Include accessibility checks: on</td></tr>
+</table>
+<p>Models accept the aliases Sonnet, Opus and Haiku or a full model name. Changes apply from the next run.</p>
+</div>
+</div>
+
+<!-- ============================================================ 14 -->
+<h1 id="security"><span class="num">14</span>Security and privacy</h1>
+<p class="lead">An AI that clicks around your application needs firm limits. These are built in.</p>
+<table>
+  <tr><th style="width:28%">Protection</th><th>How</th></tr>
+  <tr><td class="k">Limited tools</td><td>Claude Code gets the Playwright browser tools and file access inside the run folder only. Running JavaScript in the page, closing the browser and installing browsers are denied; uploads only with an upload folder. No shell.</td></tr>
+  <tr><td class="k">Your settings untouched</td><td>Claude Code runs restricted: it does not load your own Claude Code settings, hooks or MCP servers. The app never edits <code>~/.claude/settings.json</code>.</td></tr>
+  <tr><td class="k">Allowed domains</td><td>The browser refuses pages outside the session's domains during a run; links to other domains are marked Blocked.</td></tr>
+  <tr><td class="k">Page content is data</td><td>Text on a page that tries to instruct the AI is ignored and reported to you as a notice.</td></tr>
+  <tr><td class="k">Test passwords</td><td>Stored only in the local database. Removed from prompts on disk, traces, results, exported reports and, after every run, from Claude Code's own saved sessions.</td></tr>
+  <tr><td class="k">Your subscription</td><td>No API key is used or stored; <code>ANTHROPIC_API_KEY</code> is removed from Claude's environment. Claude credentials are never read.</td></tr>
+  <tr><td class="k">Processes</td><td>Stop and Close all browsers end only processes the app started, by process ID, never by program name. Your own browsers are never touched.</td></tr>
+  <tr><td class="k">Local data</td><td>Sessions, results and backups stay on this computer. Nothing is sent anywhere except what Claude Code sends to Anthropic to run the test.</td></tr>
+</table>
+
+<!-- ============================================================ 15 -->
+<h1 id="usage"><span class="num">15</span>Plan usage and cost control</h1>
+<p class="lead">Tests run on your Claude subscription; the app helps you spend it wisely.</p>
+<ul>
+  <li><b>Usage gauges:</b> the top bar shows the 5-hour and weekly usage as Claude Code reports it during runs.</li>
+  <li><b>Estimate:</b> next to Run batch, the expected share of the 5-hour window for the scenarios that would run, from your
+      recent finished runs. Other Claude Code use at the same time counts too, so treat it as a guide.</li>
+  <li><b>Pause:</b> a batch pauses before the next scenario at the limit you set (80% by default) and asks whether to go on;
+      a scenario already running is never interrupted. If usage is already over the limit, you are asked before the batch starts.</li>
+  <li><b>Models:</b> smoke tests use Sonnet by default; scenarios use Claude Code's default model.</li>
+  <li><b>Sign in once:</b> the browser keeps its sign-in between scenarios, so Claude skips logging in again.</li>
+  <li><b>Free checks:</b> console errors, failed requests, load times, contrast and the marked screenshots are done by the app, not by Claude.</li>
+</ul>
+
+<!-- ============================================================ 16 -->
+<h1 id="data"><span class="num">16</span>Data and files</h1>
+<p>Everything lives in <code>%APPDATA%\Web Testing Assistant</code> (set <code>WTA_DATA_DIR</code> to use another folder).</p>
+<table>
+  <tr><th style="width:30%">Path</th><th>Contents</th></tr>
+  <tr><td><code>wta.sqlite3</code></td><td>Sessions, accounts, scenarios, steps, reviews, bugs, runs, findings, site notes, library</td></tr>
+  <tr><td><code>runs\</code></td><td>One folder per scenario run (below)</td></tr>
+  <tr><td><code>exports\</code></td><td>Default place for exported reports</td></tr>
+  <tr><td><code>backups\</code></td><td>Database backups (latest 10)</td></tr>
+  <tr><td><code>browser-profile\</code></td><td>The built-in browser's own cookies and cache, separate from your browsers</td></tr>
+  <tr><td><code>settings.json</code>, <code>ui-state.ini</code></td><td>Settings; window layout and the last open session</td></tr>
+  <tr><td><code>usage.json</code>, <code>processes.json</code></td><td>Last plan usage readings; processes the app started</td></tr>
+</table>
+<h3>Inside a run folder</h3>
+<table>
+  <tr><th style="width:30%">File</th><th>Contents</th></tr>
+  <tr><td><code>prompt.md</code></td><td>The prompt given to Claude, with the test password replaced</td></tr>
+  <tr><td><code>mcp.json</code></td><td>Playwright MCP settings (attach to the built-in browser)</td></tr>
+  <tr><td><code>trace.jsonl</code></td><td>Claude Code's full output stream, password removed</td></tr>
+  <tr><td><code>results.json</code></td><td>The steps, statuses, bugs and notices Claude wrote</td></tr>
+  <tr><td><code>screenshots\</code></td><td>Claude's screenshots and the app's marked copies (<code>step-N-highlight.png</code>)</td></tr>
+  <tr><td><code>fixtures\</code>, <code>print-N.pdf</code></td><td>Copied upload files; printouts saved during the run</td></tr>
+</table>
+
+<!-- ============================================================ 17 -->
+<h1 id="trouble"><span class="num">17</span>Troubleshooting</h1>
+<table>
+  <tr><th style="width:34%">Problem</th><th>What to do</th></tr>
+  <tr><td class="k">Run batch is disabled</td><td>Hover over it to see why. Usually Claude Code is not signed in or Node.js is missing (<i>Help → Check setup</i>), no session is open, or the browser's debugging port is not ready yet.</td></tr>
+  <tr><td class="k">"Browser debugging port" warning</td><td>The port was taken when the app started. Restart the app.</td></tr>
+  <tr><td class="k">Run fails with "Failed to refresh OAuth token"</td><td>Another Claude Code window was refreshing its sign-in at the same moment. Wait a minute and run again.</td></tr>
+  <tr><td class="k">Usage bar says "no data"</td><td>It fills in during the first test run.</td></tr>
+  <tr><td class="k">A step is Blocked "outside the allowed domains"</td><td>Add the domain to the session (<i>Session → Session details</i>) if the test should go there.</td></tr>
+  <tr><td class="k">A batch paused</td><td>Your 5-hour usage reached the pause limit. Continue anyway, or stop and run the rest after the window resets.</td></tr>
+  <tr><td class="k">SmartScreen blocks the installer</td><td>Choose <b>More info → Run anyway</b>: the installer is not code-signed.</td></tr>
+  <tr><td class="k">Check an installation</td><td>Run <code>WebTestingAssistant.exe --self-check report.json</code>: it checks the browser engine, icons, charts and exports, and reports Node.js and Claude Code, without opening the window.</td></tr>
+</table>
+
+<!-- ============================================================ 18 -->
+<h1 id="dev"><span class="num">18</span>For developers</h1>
+<h2 id="dev-source"><span class="num">18.1</span>Running from source</h2>
+<pre>python -m venv .venv
+.venv\Scripts\python -m pip install -e .
+.venv\Scripts\python -m wta</pre>
+<p>Python 3.12; dependencies: PySide6, SQLAlchemy, openpyxl, python-docx. The project rules are in <code>CLAUDE.md</code>
+and the build history and findings in <code>PLAN.md</code>.</p>
+
+<h2 id="dev-code"><span class="num">18.2</span>Code map</h2>
+<table>
+  <tr><th style="width:34%">Module (src/wta)</th><th>Responsibility</th></tr>
+  <tr><td><code>app.py</code></td><td>Main window, menus, toolbar, running batches</td></tr>
+  <tr><td><code>claude_launcher.py</code></td><td>Everything about starting Claude Code: arguments, tools, environment, sign-in and Node.js checks</td></tr>
+  <tr><td><code>runner.py</code></td><td>One scenario run and a batch: process, stream, results, pause, history</td></tr>
+  <tr><td><code>prompt.py</code> · <code>results.py</code> · <code>stream.py</code></td><td>The prompt; reading results.json; parsing Claude Code's stream</td></tr>
+  <tr><td><code>browser.py</code> · <code>domain_guard.py</code> · <code>cdp.py</code></td><td>Built-in browser, pop-ups, banner; allowed-domain guard; debugging port</td></tr>
+  <tr><td><code>page_monitor.py</code> · <code>accessibility.py</code> · <code>highlight.py</code></td><td>The app's own page checks and marked screenshots</td></tr>
+  <tr><td><code>db/</code></td><td>Models, sessions, scenarios, runs, library, search, site notes</td></tr>
+  <tr><td><code>export/</code></td><td>Report model and the Excel, Word, PDF and Markdown writers</td></tr>
+  <tr><td><code>session_files.py</code></td><td>Removing test passwords from Claude Code's saved sessions</td></tr>
+</table>
+
+<h2 id="dev-tests"><span class="num">18.3</span>Tests and test pages</h2>
+<pre>.venv\Scripts\python -m unittest discover -s tests</pre>
+<p>The tests use a fake <code>claude</code> and never use plan. Local pages for trying the app are in
+<code>test_pages/</code> (a login app with a deliberate bug, a prompt-injection page, an upload page, a printable invoice);
+serve them with <code>.venv\Scripts\python -m http.server 8765 --bind 127.0.0.1 --directory test_pages</code>.</p>
+
+<div style="break-inside: avoid">
+<h2 id="dev-build"><span class="num">18.4</span>Building the installer and this document</h2>
+<pre>.venv\Scripts\python -m pip install -r tools\build-requirements.txt
+.venv\Scripts\python tools\build_installer.py
+.venv\Scripts\python tools\build_docs.py</pre>
+<p><code>build_installer.py</code> bundles the app with PyInstaller, runs the bundle's self-check and wraps it with Inno
+Setup 6 into <code>dist\installer\WebTestingAssistant-Setup-&lt;version&gt;.exe</code>. The version comes from
+<code>src\wta\__init__.py</code>. <code>build_docs.py</code> prints <code>docs\source\documentation.html</code> to
+<code>docs\Web-Testing-Assistant-Documentation.pdf</code>.</p>
+</div>
+
+<!-- ============================================================ APPENDIX -->
+<h1 id="appendix"><span class="num">A</span>Keyboard shortcuts</h1>
+<table>
+  <tr><th style="width:34%">Keys</th><th>Action</th></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd> · <kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>New session · Open session</td></tr>
+  <tr><td><kbd>F5</kbd> · <kbd>Shift</kbd>+<kbd>F5</kbd></td><td>Run batch · Stop</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Export report</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>,</kbd></td><td>Settings</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></td><td>Search everything</td></tr>
+  <tr><td><kbd>A</kbd> · <kbd>O</kbd> · <kbd>R</kbd></td><td>Approve · Override · Request re-run (review)</td></tr>
+  <tr><td><kbd>↑</kbd> · <kbd>↓</kbd></td><td>Previous · next step</td></tr>
+</table>
+
+<h1 id="glossary" style="break-before: auto; margin-top: 10mm"><span class="num">B</span>Glossary</h1>
+<table>
+  <tr><th style="width:26%">Term</th><th>Meaning</th></tr>
+  <tr><td class="k">Session</td><td>One testing assignment: an application, its accounts and allowed domains, and its batches.</td></tr>
+  <tr><td class="k">Batch</td><td>Up to five scenarios (or smoke pages) run together.</td></tr>
+  <tr><td class="k">Scenario</td><td>A test written as steps and an expected result.</td></tr>
+  <tr><td class="k">Smoke test</td><td>A broad check of one page; its checks are written by Claude.</td></tr>
+  <tr><td class="k">Run</td><td>One Claude Code run of one scenario, with its own folder and history.</td></tr>
+  <tr><td class="k">Final status</td><td>The status set by your review; the one reports use.</td></tr>
+  <tr><td class="k">Site note</td><td>Your instruction for every following run on a site.</td></tr>
+  <tr><td class="k">Library item</td><td>A saved scenario or smoke page, reusable across sessions.</td></tr>
+  <tr><td class="k">Claude Code</td><td>Anthropic's command-line agent, run by the app with your subscription.</td></tr>
+  <tr><td class="k">Playwright MCP</td><td>The browser toolkit Claude Code uses to drive the built-in browser.</td></tr>
+  <tr><td class="k">CDP</td><td>Chrome DevTools Protocol: the local debugging connection to the built-in browser.</td></tr>
+</table>
+
+<script>
+  // Contents: chapters (h1 with an id, except the contents itself) and their sections (h2 with an id).
+  const toc = document.getElementById("toc");
+  for (const h of document.querySelectorAll("h1[id], h2[id]")) {
+    if (h.id === "contents") continue;
+    const li = document.createElement("li");
+    li.className = h.tagName === "H1" ? "ch" : "sec";
+    const a = document.createElement("a");
+    a.href = "#" + h.id;
+    a.className = "t";
+    a.style.color = "inherit";
+    const num = h.querySelector(".num");
+    const title = Array.from(h.childNodes).filter(n => n !== num).map(n => n.textContent).join("").trim();
+    a.textContent = (num ? num.textContent + "   " : "") + title;
+    const dots = document.createElement("span"); dots.className = "dots";
+    const pg = document.createElement("span"); pg.className = "pg"; pg.dataset.for = h.id;
+    li.append(a, dots, pg);
+    toc.append(li);
+  }
+</script>
+</body>
+</html>
