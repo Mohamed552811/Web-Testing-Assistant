@@ -5,6 +5,7 @@
   "steps_per_step": "Each step is an object: \"action\" is an imperative sentence, and \"expected\" is the check after it, starting with \"Assert that\", or an empty string when nothing is checked. At least one step has a check. Do not number the steps.",
   "id": "- ID: {{id_prefix}}-<backlog number{{backlog_padding}}>-<sequence{{seq_padding}}>, starting at {{first_sequence}}, in output order.",
   "padding": " padded to {{digits}} digits",
+  "alphanumeric_key": "- This backlog's key is \"{{backlog_key}}\": write backlog_number as that text, and use its number {{key_number}} as the backlog number in the ID.",
   "type_priority": "- type: \"happy_path\" or \"corner_case\". priority: \"{{priority_high}}\" (core success journey, mandatory fields, permissions, data loss), \"{{priority_medium}}\" (alternative outcomes, numeric/optional validation, defaults, duplicates, discard), \"{{priority_low}}\" (minor options).",
   "basis": "- basis: \"specified\" when every expectation is stated in the backlog text or the user's notes, or is directly visible in a screenshot (labels, existence, shown values, behavior named by a control label); otherwise \"inferred\".",
   "source_reference": "- source_reference: the cells, image IDs or \"domain note\" the case relies on, for example \"D113 + IMG-04\".",

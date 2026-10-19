@@ -45,7 +45,26 @@ def _digits(pad: int) -> str:
     return f"[0-9]{{{pad}}}" if pad else "[0-9]+"
 
 
-def _test_case_properties(preset: OutputPreset, full: bool) -> dict:
+def _backlog_number(full: bool, numeric: bool) -> dict:
+    """Integer keys as in the spec; alphanumeric keys such as BL-5 are strings (owner decision, M2)."""
+    if numeric:
+        return {"type": "integer", "minimum": 1} if full else {"type": "integer"}
+    return {"type": "string", "minLength": 1} if full else {"type": "string"}
+
+
+def is_numeric_key(key: str) -> bool:
+    return key.isdigit()
+
+
+def key_digits(key: str) -> int:
+    """The number used in test case IDs: 5 for "5" and for "BL-5"."""
+    digits = re.findall(r"\d+", key)
+    if not digits:
+        raise ValueError(f"Backlog key {key!r} has no number")
+    return int(digits[-1])
+
+
+def _test_case_properties(preset: OutputPreset, full: bool, numeric: bool = True) -> dict:
     def text(min_length: int | None = 1, **extra) -> dict:
         prop = {"type": "string"}
         if full:
@@ -65,7 +84,7 @@ def _test_case_properties(preset: OutputPreset, full: bool) -> dict:
              if full else {"type": "string"})
     properties = {
         "id": {"type": "string", "pattern": pattern} if full else {"type": "string"},
-        "backlog_number": {"type": "integer", "minimum": 1} if full else {"type": "integer"},
+        "backlog_number": _backlog_number(full, numeric),
         "title": title,
         "type": {"enum": ["happy_path", "corner_case"]},
         "priority": {"enum": list(preset.priority_labels)},
@@ -80,9 +99,9 @@ def _test_case_properties(preset: OutputPreset, full: bool) -> dict:
     return {name: prop for name, prop in properties.items() if preset.includes(name)}
 
 
-def response_schema(preset: OutputPreset) -> dict:
+def response_schema(preset: OutputPreset, numeric_key: bool = True) -> dict:
     """Schema (a): the full validation schema, checked locally on every response."""
-    properties = _test_case_properties(preset, full=True)
+    properties = _test_case_properties(preset, full=True, numeric=numeric_key)
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": "test-case-designer-response",
@@ -91,7 +110,7 @@ def response_schema(preset: OutputPreset) -> dict:
         "additionalProperties": False,
         "required": ["backlog_number", "backlog_title", "status", "test_cases", "open_questions"],
         "properties": {
-            "backlog_number": {"type": "integer", "minimum": 1},
+            "backlog_number": _backlog_number(True, numeric_key),
             "backlog_title": {"type": "string", "minLength": 1},
             "status": {"enum": ["ok", "backlog_not_found", "insufficient_information"]},
             "test_cases": {"type": "array", "items": {"$ref": "#/$defs/test_case"}},
@@ -109,15 +128,15 @@ def response_schema(preset: OutputPreset) -> dict:
     }
 
 
-def api_schema(preset: OutputPreset) -> dict:
+def api_schema(preset: OutputPreset, numeric_key: bool = True) -> dict:
     """Schema (b): structure only, for structured output (`claude --json-schema`); the rest is checked locally."""
-    properties = _test_case_properties(preset, full=False)
+    properties = _test_case_properties(preset, full=False, numeric=numeric_key)
     return {
         "type": "object",
         "additionalProperties": False,
         "required": ["backlog_number", "backlog_title", "status", "test_cases", "open_questions"],
         "properties": {
-            "backlog_number": {"type": "integer"},
+            "backlog_number": _backlog_number(False, numeric_key),
             "backlog_title": {"type": "string"},
             "status": {"enum": ["ok", "backlog_not_found", "insufficient_information"]},
             "test_cases": {"type": "array", "items": {"$ref": "#/$defs/test_case"}},
@@ -154,7 +173,8 @@ def rule_blocks(settings: DesignerSettings) -> list[str]:
     return result
 
 
-def format_rules(preset: OutputPreset) -> list[str]:
+def format_rules(preset: OutputPreset, backlog_key: str | None = None) -> list[str]:
+    """The FORMAT RULES lines for a preset; an alphanumeric key (BL-5) adds a line on how to write it."""
     lines = _json("format_rules.json")
 
     def padding(digits: int) -> str:
@@ -167,6 +187,10 @@ def format_rules(preset: OutputPreset) -> list[str]:
         fill(lines["language_title_steps"], title_prefix=preset.title_prefix, steps_rule=steps_rule),
         fill(lines["id"], id_prefix=preset.id_prefix, backlog_padding=padding(preset.backlog_pad),
              seq_padding=padding(preset.seq_pad), first_sequence="1".zfill(max(preset.seq_pad, 1))),
+    ]
+    if backlog_key is not None and not is_numeric_key(backlog_key):
+        result.append(fill(lines["alphanumeric_key"], backlog_key=backlog_key, key_number=key_digits(backlog_key)))
+    result += [
         fill(lines["type_priority"], priority_high=high, priority_medium=medium, priority_low=low),
     ]
     result += [lines[name] for name in ("basis", "source_reference") if preset.includes(name)]
@@ -174,11 +198,13 @@ def format_rules(preset: OutputPreset) -> list[str]:
     return result
 
 
-def system_prompt(settings: DesignerSettings) -> str:
+def system_prompt(settings: DesignerSettings, backlog_key: str | None = None) -> str:
     preset = settings.preset()
+    numeric = backlog_key is None or is_numeric_key(backlog_key)
     return fill(_read("system.txt"), product_context=settings.product_context,
-                rule_blocks="\n".join(rule_blocks(settings)), format_rules="\n".join(format_rules(preset)),
-                response_schema=json.dumps(response_schema(preset), indent=2, ensure_ascii=False))
+                rule_blocks="\n".join(rule_blocks(settings)),
+                format_rules="\n".join(format_rules(preset, backlog_key)),
+                response_schema=json.dumps(response_schema(preset, numeric), indent=2, ensure_ascii=False))
 
 
 # --- user message (spec 7.3) ----------------------------------------------------------------------
@@ -194,7 +220,7 @@ class PromptImage:
 
 
 def backlog_number_value(number: str) -> int | str:
-    return int(number) if number.isdigit() else number
+    return int(number) if is_numeric_key(number) else number
 
 
 def backlog_row_data(number: str, title: str, sheet: str, first_row: int, last_row: int,

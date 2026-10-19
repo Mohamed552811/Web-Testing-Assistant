@@ -233,6 +233,23 @@ class SchemaTests(unittest.TestCase):
         for unsupported in ("minLength", "maxLength", "minimum", "pattern", "uniqueItems", "minItems"):
             self.assertNotIn(unsupported, flat)
 
+    def test_alphanumeric_keys_are_strings(self):
+        """Owner decision (M2): BL-5 keeps its text as backlog_number; the ID uses its number (TC-005-01)."""
+        preset = DesignerSettings().preset()
+        full, api = pb.response_schema(preset, numeric_key=False), pb.api_schema(preset, numeric_key=False)
+        self.assertEqual(full["properties"]["backlog_number"], {"type": "string", "minLength": 1})
+        self.assertEqual(full["$defs"]["test_case"]["properties"]["backlog_number"], {"type": "string", "minLength": 1})
+        self.assertEqual(api["properties"]["backlog_number"], {"type": "string"})
+        self.assertEqual((pb.key_digits("BL-5"), pb.key_digits("12")), (5, 12))
+        rules = pb.format_rules(preset, "BL-5")
+        self.assertIn('key is "BL-5": write backlog_number as that text, and use its number 5', rules[3])
+        self.assertEqual(len(pb.format_rules(preset, "5")), 8)  # numeric keys: no extra line
+        prompt = pb.system_prompt(DesignerSettings(), "BL-5")
+        schema = json.loads(prompt.split("JSON SCHEMA OF YOUR OUTPUT\n", 1)[1])
+        self.assertEqual(schema["properties"]["backlog_number"]["type"], "string")
+        with self.assertRaises(ValueError):
+            pb.key_digits("ABC")
+
     def test_preset_options_shape_both_schemas(self):
         preset = with_preset(id_prefix="PD", backlog_pad=0, seq_pad=0, priority_labels=("P1", "P2", "P3"),
                              title_prefix="Check (UI) that", steps_style=PER_STEP_EXPECTED,

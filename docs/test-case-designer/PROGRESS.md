@@ -5,7 +5,7 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
 ## Status
 
 - Done: Step 0 (exploration, plan, decisions below); M0; M1; M2.
-- In progress: nothing. Waiting for the go-ahead on M3 and answers to the open decisions below.
+- In progress: M3.
 - Next: M3 generation through `claude -p`, validation, retry and continuation, golden fixtures.
 
 | Milestone | Status |
@@ -119,17 +119,18 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
   - In the user message, notes and supplementary context are listed as "- " lines, and locked test cases as a JSON array. Empty sections stay empty.
 - Not yet built: storing notes and supplementary context per backlog (`backlog_context`). That is M4 UI work; the prompt builder already accepts them as lists.
 
-## Open decisions
+## Decisions (2026-10-20)
 
-1. **Alphanumeric backlog numbers.**
-   - Spec 3.4 allows keys like `BL-5`, but schema (a) makes `backlog_number` an integer, and the ID pattern only allows digits.
-   - Today such a backlog is sent with `"backlog_number": "BL-5"`, which the schema would reject.
-   - The options: (a) only numeric keys can be generated, and the user is told; (b) for alphanumeric keys, allow a string `backlog_number` and use the key's digits in the ID.
-2. **Per-step expected style:** confirm the interpretation above.
-3. **Content from the spec in committed files.** Three places carry it:
-   - the prompt files (the owner's instructions and the examples in spec 7.1);
-   - the default product context ("ERP 'Print' app");
-   - the M1 reference test's backlog titles in `tests/test_designer_layout.py`.
-   - The prompt files have to ship with the app. The reference test titles could move into the git-ignored fixtures folder instead.
+5. **Alphanumeric backlog keys (BL-5) are allowed.**
+   - For such a backlog, `backlog_number` is a string in both schemas.
+   - Test case IDs use the key's number: BL-5 gives TC-005-01.
+   - The format rules get one extra line saying how to write the key (`prompt_builder.format_rules(preset, backlog_key)`).
+6. **The per-step expected style is confirmed as described in the M2 notes.**
+7. **Spec content in git:**
+   - The prompt files and the default product context stay in git, because the app needs them.
+   - The reference test's expected backlog map now lives in the git-ignored `tests/fixtures/designer/backlog_map.json`. Tests use neutral sample data.
+   - The M1 commit (af6f1e1) still holds the old test titles in its history; it has not been pushed.
+
+## Open decisions
 
 None.
