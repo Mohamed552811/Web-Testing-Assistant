@@ -4,15 +4,15 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
 
 ## Status
 
-- Done: Step 0 (exploration, plan, decisions below); M0; M1.
-- In progress: nothing. Waiting for the go-ahead on M2.
-- Next: M2 settings, output presets, prompt builder.
+- Done: Step 0 (exploration, plan, decisions below); M0; M1; M2.
+- In progress: nothing. Waiting for the go-ahead on M3 and answers to the open decisions below.
+- Next: M3 generation through `claude -p`, validation, retry and continuation, golden fixtures.
 
 | Milestone | Status |
 |---|---|
 | M0 Launchpad, setup step, mode switcher | done (2026-10-19) |
 | M1 Upload-time workbook analysis | done (2026-10-19) |
-| M2 Settings, presets, prompt builder | not started |
+| M2 Settings, presets, prompt builder | done (2026-10-20) |
 | M3 Generation, validation, retry, golden fixtures | not started |
 | M4 Designer UI | not started |
 | M5 Regenerate, history, tags, exports | not started |
@@ -96,8 +96,40 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
   - Applying a new mapping rebuilds that sheet's backlogs, so any pictures attached by hand on that sheet return to the defaults.
 - Not committed: the GitHub repository is public, so the spec, the reference workbook and the extracted screenshots in `tests/fixtures/designer/` are left out until the owner decides. Tests that need them are skipped when the files are missing.
 
+## M2 notes
+
+- Files:
+  - `src/wta/designer/settings.py`: `DesignerSettings` and `OutputPreset`, with the defaults of spec 8.3. Bad stored values fall back to the defaults.
+  - `src/wta/db/designer_settings.py`: settings stored in the `designer_setting` table, in one row (scope `workspace`, name `feature`).
+  - `src/wta/designer/prompt_builder.py`: schemas (a) and (b) built from the preset, the system prompt, the rule blocks, the format rules, `backlog_row_data`, the user-message text and the content blocks (images first, each with a label).
+  - Versioned wording in `src/wta/designer/prompts/v1/`: `system.txt`, `rule_blocks.json`, `format_rules.json`, `user_message.txt` and `image_label.txt`. `PROMPT_VERSION = "v1"`. The folder is included in package data and in the PyInstaller spec.
+  - `src/wta/designer/settings_dialog.py`: opened from "Settings…" on the setup page and in the workspace.
+- Verified against the local spec (these tests are skipped when the spec is absent):
+  - The default system prompt equals spec 7.1, with the placeholders filled.
+  - All nine rule blocks equal spec 7.2.
+  - The default schemas (a) and (b) equal spec 5.3.
+- `system.txt` keeps the trailing space on the owner's first instruction. A test that does not need the spec checks it.
+- Choices where the spec was silent:
+  - "Steps with per-step expected": each step is `{action, expected}`, and `expected` is an "Assert that …" check or an empty string. At least one step has a check. `expected_result` stays, because spec 5.4 says it is always present. Schema (a) requires at least 1 step here; the single-expected style keeps the spec's minimum of 2.
+  - Padding 0 in the ID pattern means "no padding": the pattern becomes `[0-9]+`, and the prompt says "starting at 1".
+  - The tags rule says "smoke" goes on happy paths with the preset's first priority label ("High" or "P1"). With tag suggestions on, "smoke" and "regression" must stay in the vocabulary.
+  - When a preset turns the tags field off, the TAGS rule block is left out of the prompt.
+  - The built-in Default preset is read-only. Use "Save as new preset" to change a copy.
+  - Model: "latest Opus" is `claude --model opus`; a pinned id is passed to `--model` as it is.
+  - In the user message, notes and supplementary context are listed as "- " lines, and locked test cases as a JSON array. Empty sections stay empty.
+- Not yet built: storing notes and supplementary context per backlog (`backlog_context`). That is M4 UI work; the prompt builder already accepts them as lists.
+
 ## Open decisions
 
-- Whether to commit `docs/test-case-designer/` (spec, prompt, `Print_designer_6.xlsx`) and `tests/fixtures/designer/` to the public repository.
+1. **Alphanumeric backlog numbers.**
+   - Spec 3.4 allows keys like `BL-5`, but schema (a) makes `backlog_number` an integer, and the ID pattern only allows digits.
+   - Today such a backlog is sent with `"backlog_number": "BL-5"`, which the schema would reject.
+   - The options: (a) only numeric keys can be generated, and the user is told; (b) for alphanumeric keys, allow a string `backlog_number` and use the key's digits in the ID.
+2. **Per-step expected style:** confirm the interpretation above.
+3. **Content from the spec in committed files.** Three places carry it:
+   - the prompt files (the owner's instructions and the examples in spec 7.1);
+   - the default product context ("ERP 'Print' app");
+   - the M1 reference test's backlog titles in `tests/test_designer_layout.py`.
+   - The prompt files have to ship with the app. The reference test titles could move into the git-ignored fixtures folder instead.
 
 None.

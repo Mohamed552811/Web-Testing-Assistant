@@ -30,7 +30,9 @@ from wta import __version__
 from wta import accessibility, cdp, compare, cost, fixtures, housekeeping, icons, test_data, theme
 from wta import settings as app_settings
 from wta import launchpad as modes
+from wta.db import designer_settings
 from wta.db import workbooks as workbook_store
+from wta.designer.settings_dialog import DesignerSettingsDialog
 from wta.designer.layout import LOW_CONFIDENCE
 from wta.designer.mapping_dialog import MappingDialog
 from wta.designer.setup_page import DesignerSetupPage, DesignerWorkspace, WorkbookEntry
@@ -182,9 +184,11 @@ class MainWindow(QMainWindow):
         self.designer_setup.workspace_requested.connect(self.open_designer_workspace)
         self.designer_setup.workbook_selected.connect(self._show_workbook_summary)
         self.designer_setup.mapping_requested.connect(self.edit_workbook_mapping)
+        self.designer_setup.settings_requested.connect(self.edit_designer_settings)
         self.designer_workspace = DesignerWorkspace(self)
         self.designer_workspace.change_workbook_requested.connect(
             lambda: self.pages.setCurrentWidget(self.designer_setup))
+        self.designer_workspace.settings_requested.connect(self.edit_designer_settings)
         self.pages = QStackedWidget()
         for page in (self.launchpad, self.designer_setup, self.designer_workspace, splitter):
             self.pages.addWidget(page)
@@ -456,6 +460,17 @@ class MainWindow(QMainWindow):
         sheet = workbook_store.apply_mapping(self.db, dialog.selected_sheet_id(), dialog.result_mapping())
         self._refresh_workbooks(workbook_id)
         self.statusBar().showMessage(f"Sheet “{sheet.name}”: {len(sheet.backlogs)} backlog(s) with the new mapping.", 8000)
+
+    def edit_designer_settings(self) -> None:
+        dialog = DesignerSettingsDialog(designer_settings.load(self.db), self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            designer_settings.save(self.db, dialog.settings())
+        except ValueError as exc:
+            QMessageBox.warning(self, "Test Case Design settings", str(exc))
+            return
+        self.statusBar().showMessage("Test Case Design settings saved.", 5000)
 
     def open_designer_workspace(self, workbook_id: int) -> None:
         try:

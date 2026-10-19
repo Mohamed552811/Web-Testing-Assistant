@@ -1,0 +1,13 @@
+{
+  "output": "- Output a single JSON object conforming to the JSON Schema below. Output JSON only: no Markdown fences, no commentary.",
+  "language_title_steps": "- English only. Title: \"{{title_prefix}} ...\" (one sentence, at most 120 characters). {{steps_rule}}",
+  "steps_single": "Steps are imperative sentences; every check starts with \"Assert that\". Do not number the steps.",
+  "steps_per_step": "Each step is an object: \"action\" is an imperative sentence, and \"expected\" is the check after it, starting with \"Assert that\", or an empty string when nothing is checked. At least one step has a check. Do not number the steps.",
+  "id": "- ID: {{id_prefix}}-<backlog number{{backlog_padding}}>-<sequence{{seq_padding}}>, starting at {{first_sequence}}, in output order.",
+  "padding": " padded to {{digits}} digits",
+  "type_priority": "- type: \"happy_path\" or \"corner_case\". priority: \"{{priority_high}}\" (core success journey, mandatory fields, permissions, data loss), \"{{priority_medium}}\" (alternative outcomes, numeric/optional validation, defaults, duplicates, discard), \"{{priority_low}}\" (minor options).",
+  "basis": "- basis: \"specified\" when every expectation is stated in the backlog text or the user's notes, or is directly visible in a screenshot (labels, existence, shown values, behavior named by a control label); otherwise \"inferred\".",
+  "source_reference": "- source_reference: the cells, image IDs or \"domain note\" the case relies on, for example \"D113 + IMG-04\".",
+  "status": "- If the input contains no usable backlog return status \"backlog_not_found\"; if it is too thin to test return status \"insufficient_information\"; in both cases return an empty test_cases array and explain in open_questions. Otherwise status is \"ok\".",
+  "open_questions": "- open_questions: ambiguities, contradictions or undefined behavior that matter for testing this backlog, one clear question each. Use an empty array if there are none."
+}

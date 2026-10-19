@@ -1,0 +1,16 @@
+Backlog number: {{backlog_number}}
+Source: sheet "{{sheet_name}}", rows {{first_row}}-{{last_row}}
+
+Backlog data (JSON):
+{{backlog_row_data}}
+
+Notes from the user (may be empty):
+{{domain_notes}}
+
+Supplementary context from other backlogs or files (may be empty):
+{{supplementary_context}}
+
+Additional guidance from the user (may be empty): {{user_guidance}}
+Test cases to keep unchanged (may be empty; do not repeat or renumber them, only add what is missing): {{locked_test_cases}}
+
+Write the test cases for this backlog now. Return the JSON object only.

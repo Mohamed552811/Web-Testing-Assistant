@@ -36,6 +36,7 @@ class DesignerSetupPage(QWidget):
     workbook_selected = Signal(int)  # show its analysis summary
     workspace_requested = Signal(int)  # enter the workspace with this workbook
     mapping_requested = Signal(int)  # edit the backlog mapping of this workbook's sheets
+    settings_requested = Signal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -81,13 +82,21 @@ class DesignerSetupPage(QWidget):
         columns.addSpacing(16)
         columns.addLayout(right, 3)
 
+        self.settings_button = QPushButton("Settings…")
+        icons.set_icon(self.settings_button, "settings")
+        self.settings_button.setToolTip("Generation rules, tags, output presets, model and product context")
+        header = QHBoxLayout()
+        header.addWidget(title, 1)
+        header.addWidget(self.settings_button)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 16, 24, 16)
-        layout.addWidget(title)
+        layout.addLayout(header)
         layout.addWidget(intro)
         layout.addSpacing(8)
         layout.addLayout(columns, 1)
 
+        self.settings_button.clicked.connect(self.settings_requested)
         self.upload_button.clicked.connect(self.choose_file)
         self.workbooks.currentItemChanged.connect(self._on_current_changed)
         self.workbooks.itemActivated.connect(lambda _item: self.enter_button.click())
@@ -138,6 +147,7 @@ class DesignerWorkspace(QWidget):
     """The designer's workspace for one workbook. Backlog picker, generation and results arrive in M1–M5."""
 
     change_workbook_requested = Signal()
+    settings_requested = Signal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -147,8 +157,12 @@ class DesignerWorkspace(QWidget):
         self.change_button = QPushButton("Change workbook")
         icons.set_icon(self.change_button, "folder-open")
         self.change_button.clicked.connect(self.change_workbook_requested)
+        self.settings_button = QPushButton("Settings…")
+        icons.set_icon(self.settings_button, "settings")
+        self.settings_button.clicked.connect(self.settings_requested)
         header = QHBoxLayout()
         header.addWidget(self.title, 1)
+        header.addWidget(self.settings_button)
         header.addWidget(self.change_button)
         self.body = QLabel("Backlog selection and test case generation will appear here.")
         self.body.setProperty("muted", True)

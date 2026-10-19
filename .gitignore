@@ -8,3 +8,9 @@ dist/
 .vscode/
 *.sqlite3
 *.db
+
+# Test Case Designer source material: kept local (the repository is public)
+docs/test-case-designer/*
+!docs/test-case-designer/PROGRESS.md
+!docs/test-case-designer/README.md
+tests/fixtures/designer/

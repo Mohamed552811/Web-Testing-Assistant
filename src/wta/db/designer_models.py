@@ -130,6 +130,19 @@ class Image(Base):
     __table_args__ = (UniqueConstraint("workbook_id", "label", name="uq_image_label"),)
 
 
+class DesignerSetting(Base):
+    """Workspace-level settings (spec 8.2 `settings`); the feature settings live under name "feature"."""
+
+    __tablename__ = "designer_setting"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scope: Mapped[str] = mapped_column(String(50), default="workspace")
+    name: Mapped[str] = mapped_column(String(100))
+    value: Mapped[dict] = mapped_column(JSON, default=dict)
+
+    __table_args__ = (UniqueConstraint("scope", "name", name="uq_designer_setting"),)
+
+
 class BacklogImage(Base):
     """Many-to-many: a picture attached to a backlog, automatically (anchor row) or by hand."""
 
