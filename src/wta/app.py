@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QMainWindow,
     QMessageBox,
+    QSizePolicy,
     QSplitter,
     QStackedWidget,
     QTabWidget,
@@ -37,6 +38,7 @@ from wta.notify import Notifier
 from wta.highlight import Highlighter, highlight_path
 from wta.page_monitor import PageMonitor
 from wta.processes import ProcessRegistry
+from wta.scroll import scrollable
 from wta.results import ConfirmationRequest
 from wta.db import Database, store
 from wta.db import runs as run_store
@@ -139,6 +141,8 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.runs_tab, "Runs")
         for tab in self.review_tabs:
             tab.site_note_saved.connect(self.runs_tab.notes_panel.refresh)
+        self.tabs.currentChanged.connect(self._size_tabs_by_current)
+        self._size_tabs_by_current()
 
         # Left side: the welcome screen until a session is open, then the browser.
         self.welcome = WelcomePage(self)
@@ -150,9 +154,12 @@ class MainWindow(QMainWindow):
         self.left.addWidget(self.browser)
         self.welcome.set_sessions(store.list_sessions(db))
 
+        # The tabs sit in a scroll area so the splitter can narrow them below their ~600px
+        # minimum (a scrollbar appears) and the browser can take most of the window.
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.left)
-        splitter.addWidget(self.tabs)
+        splitter.addWidget(scrollable(self.tabs))
+        splitter.setCollapsible(1, False)  # dragging far right stops at the scroll area's minimum, not a hidden panel
         splitter.setSizes([850, 750])
         self.splitter = splitter
 
@@ -283,6 +290,16 @@ class MainWindow(QMainWindow):
         icons.set_icon(self.runs_tab.refresh_button, "rotate-cw")
         # Close all browsers now lives in the toolbar; the top bar keeps only status and usage.
         self.top_bar.close_all_button.hide()
+
+    def _size_tabs_by_current(self, _index: int = -1) -> None:
+        """Size the tab area by the shown tab only (hidden pages get Ignored), so the tall Runs
+        tab does not make Scenarios scroll as a whole; each section's list scrolls on its own."""
+        current = self.tabs.currentWidget()
+        for i in range(self.tabs.count()):
+            page = self.tabs.widget(i)
+            policy = QSizePolicy.Policy.Preferred if page is current else QSizePolicy.Policy.Ignored
+            page.setSizePolicy(policy, policy)
+        self.tabs.updateGeometry()
 
     def run_current_tab(self) -> None:
         """Toolbar Run: the batch on the Scenarios or Smoke test tab, whichever is showing (Scenarios otherwise)."""

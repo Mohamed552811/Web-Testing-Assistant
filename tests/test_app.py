@@ -49,6 +49,21 @@ class MainWindowTests(unittest.TestCase):
         self.assertIn("signed in", window.scenario_tab.run_button.toolTip())
         window.deleteLater()
 
+    def test_browser_can_take_most_of_the_window(self):
+        window = MainWindow(self.db, app_dir=Path(self.tmp.name), check_sign_in=False)
+        window.resize(1200, 800)
+        window.show()
+        window.show_session(store.create_session(self.db, store.SessionDetails(name="S", target_url="https://a.example.com")))
+        window.splitter.setSizes([5000, 1])
+        app.processEvents()
+        browser_width, tabs_width = window.splitter.sizes()
+        self.assertGreater(browser_width, 900)  # was capped near half: the tabs held ~600px
+        self.assertGreater(tabs_width, 0)  # narrowed, not collapsed away
+        # The tall Runs tab no longer sets the height of the others, so Scenarios does not scroll as a whole.
+        self.assertLess(window.tabs.minimumSizeHint().height(), window.runs_tab.minimumSizeHint().height())
+        self.assertFalse(window.splitter.widget(1).verticalScrollBar().isVisible())
+        window.deleteLater()
+
     def test_export_uses_file_extension_or_default_format(self):
         window = MainWindow(self.db, app_dir=Path(self.tmp.name), check_sign_in=False)
         self.assertFalse(window.export_action.isEnabled())  # no session yet

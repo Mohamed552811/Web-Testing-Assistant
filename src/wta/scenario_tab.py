@@ -203,7 +203,7 @@ class ScenarioTab(QWidget):
         splitter.addWidget(scenario_box)
         splitter.addWidget(self.steps_box)
         splitter.addWidget(self.review_box)
-        splitter.setSizes([110, 280, 480])
+        splitter.setSizes([170, 280, 420])  # room for a few scenarios with their buttons below
 
         layout = QVBoxLayout(self)
         layout.addLayout(batch_row)
