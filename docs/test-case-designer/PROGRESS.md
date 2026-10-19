@@ -4,14 +4,14 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
 
 ## Status
 
-- Done: Step 0 (exploration, plan, decisions below); M0.
-- In progress: nothing. Waiting for the go-ahead on M1.
-- Next: M1 upload-time workbook analysis.
+- Done: Step 0 (exploration, plan, decisions below); M0; M1.
+- In progress: nothing. Waiting for the go-ahead on M2.
+- Next: M2 settings, output presets, prompt builder.
 
 | Milestone | Status |
 |---|---|
 | M0 Launchpad, setup step, mode switcher | done (2026-10-19) |
-| M1 Upload-time workbook analysis | not started |
+| M1 Upload-time workbook analysis | done (2026-10-19) |
 | M2 Settings, presets, prompt builder | not started |
 | M3 Generation, validation, retry, golden fixtures | not started |
 | M4 Designer UI | not started |
@@ -70,6 +70,34 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
 - The card texts for Smoke and Regression use the brief's wording ("manual checklists"). That wording fits once M6 adds checklist runs.
 - Placeholders until M1: "Upload workbook…" only shows a status message, and the workbook list is empty.
 
+## M1 notes
+
+- Files:
+  - `src/wta/designer/xlsx_reader.py`: reads cells and drawings from the ZIP with `zipfile` and `ElementTree`. Pictures keep their original bytes, so MD5s match the file.
+  - `src/wta/designer/layout.py`: detects block or table layout, applies a `Mapping` override, builds the backlog map and attaches pictures.
+  - `src/wta/db/designer_models.py` and `src/wta/db/workbooks.py`: storage, versions, remapping and attachments.
+  - `src/wta/designer/summary.py`: the analysis summary.
+  - `src/wta/designer/mapping_dialog.py`: the manual mapping screen.
+  - `tools/extract_designer_fixtures.py`: writes `tests/fixtures/designer/` (IMG-01 … IMG-14, IMG-S1, `manifest.json`).
+- Result: the reference workbook reproduces the spec 3.3 map exactly.
+  - 10 backlogs on "Print d." and backlog 5 on "Sheet1".
+  - 15 attachments; IMG-13 has the same MD5 as IMG-04, and both are kept.
+  - The status column ("wt") is stored and never used.
+- Deviations from the spec, and choices where it was silent:
+  - Tables are prefixed `designer_`.
+  - `backlog_item` is unique on (sheet, number, occurrence) instead of (sheet, number), so a number repeated on one sheet can be stored. The upload warns about it; M4 lets the user pick which one.
+  - Picture files are stored once in `designer_image_blob`, keyed by MD5.
+  - The uploaded file is kept in `designer_workbook.data`, so a sheet can be re-analyzed with a new mapping.
+  - Spec 3.7 asks for "at least two entries" in the number column, but `Sheet1` has only one backlog. A single entry is therefore accepted with low confidence (60%), and the app suggests checking the mapping.
+  - Picture labels: IMG-01, IMG-02 … on the first sheet, in anchor order (row, then column). On the other sheets, IMG-S1, IMG-S2 … are counted across those sheets.
+  - The confidence score combines three things: how many numbers have a title to their right, whether the numbers increase, and whether they are consecutive. Below 70% the summary flags the sheet and the app offers the mapping screen.
+  - Versions: uploads whose file names differ only by a trailing version number ("Print_designer_6" → family "print designer") form one family and are numbered v1, v2 … The summary lists backlogs added, removed or changed since the previous version, using a content hash of the title, text and attached picture MD5s. Hand-set mappings for sheets with the same name are offered for reuse.
+  - The same file uploaded again (same SHA-256) is not stored twice.
+  - Applying a new mapping rebuilds that sheet's backlogs, so any pictures attached by hand on that sheet return to the defaults.
+- Not committed: the GitHub repository is public, so the spec, the reference workbook and the extracted screenshots in `tests/fixtures/designer/` are left out until the owner decides. Tests that need them are skipped when the files are missing.
+
 ## Open decisions
+
+- Whether to commit `docs/test-case-designer/` (spec, prompt, `Print_designer_6.xlsx`) and `tests/fixtures/designer/` to the public repository.
 
 None.

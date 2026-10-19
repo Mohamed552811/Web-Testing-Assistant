@@ -4,6 +4,7 @@ import sys
 import threading
 from datetime import datetime
 from pathlib import Path
+from xml.etree import ElementTree
 
 from PySide6.QtCore import QObject, QSettings, QSize, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QKeySequence
@@ -29,7 +30,11 @@ from wta import __version__
 from wta import accessibility, cdp, compare, cost, fixtures, housekeeping, icons, test_data, theme
 from wta import settings as app_settings
 from wta import launchpad as modes
-from wta.designer.setup_page import DesignerSetupPage, DesignerWorkspace
+from wta.db import workbooks as workbook_store
+from wta.designer.layout import LOW_CONFIDENCE
+from wta.designer.mapping_dialog import MappingDialog
+from wta.designer.setup_page import DesignerSetupPage, DesignerWorkspace, WorkbookEntry
+from wta.designer.summary import summary_html
 from wta.welcome import AboutDialog, WelcomePage
 from wta.housekeeping_dialog import HousekeepingDialog
 from wta.search_dialog import SearchDialog
@@ -175,6 +180,8 @@ class MainWindow(QMainWindow):
         self.designer_setup = DesignerSetupPage(self)
         self.designer_setup.upload_requested.connect(self.upload_workbook)
         self.designer_setup.workspace_requested.connect(self.open_designer_workspace)
+        self.designer_setup.workbook_selected.connect(self._show_workbook_summary)
+        self.designer_setup.mapping_requested.connect(self.edit_workbook_mapping)
         self.designer_workspace = DesignerWorkspace(self)
         self.designer_workspace.change_workbook_requested.connect(
             lambda: self.pages.setCurrentWidget(self.designer_setup))
@@ -358,6 +365,7 @@ class MainWindow(QMainWindow):
             self.pages.setCurrentWidget(self.splitter)
             self.tabs.setCurrentWidget(self.smoke_tab if mode == modes.SMOKE else self.scenario_tab)
         else:
+            self._refresh_workbooks()
             self.pages.setCurrentWidget(self.designer_setup)
 
     def continue_last_mode(self) -> None:
@@ -383,12 +391,80 @@ class MainWindow(QMainWindow):
         card.setToolTip("" if self.top_bar.signed_in
                         else "Claude Code must be installed and signed in (Help, Check setup).")
 
+    # --- Test Case Design: workbooks ----------------------------------------------------
+
+    def _refresh_workbooks(self, select_id: int | None = None) -> None:
+        if select_id is None:
+            last = self._ui_state().value("last_workbook_id")
+            select_id = int(last) if last is not None and str(last).isdigit() else None
+        entries = [WorkbookEntry(w.id, w.file_name,
+                                 f"{w.version_label} · uploaded {local_time(w.uploaded_at)} · "
+                                 f"{w.sheet_count} sheet(s) · {w.backlog_count} backlog(s)")
+                   for w in workbook_store.list_workbooks(self.db)]
+        self.designer_setup.set_workbooks(entries, select_id)
+
+    def _show_workbook_summary(self, workbook_id: int) -> None:
+        try:
+            self.designer_setup.set_summary(summary_html(workbook_store.load_workbook(self.db, workbook_id)))
+        except LookupError as exc:
+            self.designer_setup.set_summary(f"<p>{exc}</p>")
+            return
+        state = self._ui_state()
+        state.setValue("last_workbook_id", workbook_id)
+        state.sync()
+
     def upload_workbook(self, path: Path) -> None:
-        self.statusBar().showMessage(f"Workbook analysis is not available yet (milestone M1): {path.name}", 10000)
+        """Analyze an uploaded workbook (spec 3.7), offer earlier hand-set mappings, then show the summary."""
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            result = workbook_store.import_workbook(self.db, path)
+        except (OSError, ValueError, KeyError, ElementTree.ParseError) as exc:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.warning(self, "Upload workbook", f"Could not read {path.name}:\n{exc}")
+            return
+        QApplication.restoreOverrideCursor()
+        if result.already_uploaded:
+            self.statusBar().showMessage(f"{path.name} was uploaded before; showing that workbook.", 8000)
+        view = workbook_store.load_workbook(self.db, result.workbook_id)
+        if result.reusable_mappings:
+            names = ", ".join(f"“{name}”" for name in result.reusable_mappings)
+            answer = QMessageBox.question(
+                self, "Reuse mapping",
+                f"This looks like a new version of an earlier workbook. Reuse the mapping you set by hand for {names}?")
+            if answer == QMessageBox.StandardButton.Yes:
+                for sheet in view.sheets:
+                    if sheet.name in result.reusable_mappings:
+                        workbook_store.apply_mapping(self.db, sheet.id, result.reusable_mappings[sheet.name])
+                view = workbook_store.load_workbook(self.db, result.workbook_id)
+        self._refresh_workbooks(result.workbook_id)
+        doubtful = [s for s in view.sheets if not s.manual and s.confidence < LOW_CONFIDENCE]
+        if doubtful and not result.already_uploaded:
+            names = ", ".join(f"“{s.name}”" for s in doubtful)
+            answer = QMessageBox.question(
+                self, "Check the mapping",
+                f"The backlogs on {names} were detected with low confidence. Check the mapping now?")
+            if answer == QMessageBox.StandardButton.Yes:
+                self.edit_workbook_mapping(result.workbook_id, doubtful[0].id)
+
+    def edit_workbook_mapping(self, workbook_id: int, sheet_id: int | None = None) -> None:
+        view = workbook_store.load_workbook(self.db, workbook_id)
+        if not view.sheets:
+            return
+        dialog = MappingDialog(view.sheets, sheet_id, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        sheet = workbook_store.apply_mapping(self.db, dialog.selected_sheet_id(), dialog.result_mapping())
+        self._refresh_workbooks(workbook_id)
+        self.statusBar().showMessage(f"Sheet “{sheet.name}”: {len(sheet.backlogs)} backlog(s) with the new mapping.", 8000)
 
     def open_designer_workspace(self, workbook_id: int) -> None:
-        item = self.designer_setup.workbooks.currentItem()
-        self.designer_workspace.set_workbook(workbook_id, item.text().split("\n")[0] if item else "")
+        try:
+            view = workbook_store.load_workbook(self.db, workbook_id)
+        except LookupError as exc:
+            QMessageBox.warning(self, "Open workspace", str(exc))
+            self._refresh_workbooks()
+            return
+        self.designer_workspace.set_workbook(workbook_id, f"{view.file_name} ({view.version_label})")
         self.pages.setCurrentWidget(self.designer_workspace)
 
     def _apply_button_icons(self) -> None:

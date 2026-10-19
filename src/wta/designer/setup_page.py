@@ -35,6 +35,7 @@ class DesignerSetupPage(QWidget):
     upload_requested = Signal(Path)
     workbook_selected = Signal(int)  # show its analysis summary
     workspace_requested = Signal(int)  # enter the workspace with this workbook
+    mapping_requested = Signal(int)  # edit the backlog mapping of this workbook's sheets
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -57,6 +58,10 @@ class DesignerSetupPage(QWidget):
         self.enter_button.setProperty("primary", True)
         icons.set_icon(self.enter_button, "play", "on-accent")
         self.enter_button.setEnabled(False)
+        self.mapping_button = QPushButton("Edit mapping…")
+        icons.set_icon(self.mapping_button, "pencil")
+        self.mapping_button.setToolTip("Set which columns and rows hold the backlogs, if the detection is wrong")
+        self.mapping_button.setEnabled(False)
 
         left = QVBoxLayout()
         left.addWidget(QLabel("Workbooks"))
@@ -66,7 +71,11 @@ class DesignerSetupPage(QWidget):
         right = QVBoxLayout()
         right.addWidget(QLabel("Analysis summary"))
         right.addWidget(self.summary, 1)
-        right.addWidget(self.enter_button, 0, Qt.AlignmentFlag.AlignRight)
+        actions = QHBoxLayout()
+        actions.addWidget(self.mapping_button)
+        actions.addStretch(1)
+        actions.addWidget(self.enter_button)
+        right.addLayout(actions)
         columns = QHBoxLayout()
         columns.addLayout(left, 2)
         columns.addSpacing(16)
@@ -83,6 +92,8 @@ class DesignerSetupPage(QWidget):
         self.workbooks.currentItemChanged.connect(self._on_current_changed)
         self.workbooks.itemActivated.connect(lambda _item: self.enter_button.click())
         self.enter_button.clicked.connect(self._enter)
+        self.mapping_button.clicked.connect(
+            lambda: self.selected_id() is not None and self.mapping_requested.emit(self.selected_id()))
         self.set_workbooks([])
 
     def choose_file(self) -> None:
@@ -103,6 +114,7 @@ class DesignerSetupPage(QWidget):
         if self.workbooks.currentItem() is None:
             self.summary.clear()
             self.enter_button.setEnabled(False)
+            self.mapping_button.setEnabled(False)
 
     def set_summary(self, html: str) -> None:
         self.summary.setHtml(html)
@@ -113,6 +125,7 @@ class DesignerSetupPage(QWidget):
 
     def _on_current_changed(self, current, _previous) -> None:
         self.enter_button.setEnabled(current is not None)
+        self.mapping_button.setEnabled(current is not None)
         if current is not None:
             self.workbook_selected.emit(current.data(Qt.ItemDataRole.UserRole))
 

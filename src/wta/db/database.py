@@ -6,6 +6,7 @@ from sqlalchemy import Engine, create_engine, event, inspect, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.schema import CreateColumn
 
+from wta.db import designer_models  # noqa: F401  (registers the Test Case Designer tables)
 from wta.db.models import Base
 
 

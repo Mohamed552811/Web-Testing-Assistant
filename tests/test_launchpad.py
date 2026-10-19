@@ -7,17 +7,23 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if os.name == "nt":  # the offscreen platform has no fonts of its own; text would render as boxes
     os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"))
 
+from unittest import mock  # noqa: E402
+
 from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
+from PySide6.QtWidgets import QMessageBox  # noqa: E402
 
 from wta import launchpad as modes  # noqa: E402
 from wta.app import MainWindow  # noqa: E402
 from wta.db import Database, store  # noqa: E402
+from wta.db import workbooks  # noqa: E402
 from wta.designer.setup_page import WorkbookEntry  # noqa: E402
 
 try:  # the shared app, closed down cleanly at exit (see qt_app.py)
+    from designer_xlsx import SheetSpec, build  # noqa: E402
     from qt_app import app  # noqa: E402
 except ImportError:  # run as tests.<module>
+    from tests.designer_xlsx import SheetSpec, build  # noqa: E402
     from tests.qt_app import app  # noqa: E402
 
 
@@ -128,19 +134,32 @@ class LaunchpadTests(unittest.TestCase):
         setup = window.designer_setup
         self.assertFalse(setup.enter_button.isEnabled())
         self.assertTrue(setup.empty_label.isVisible())
+        ids = []
+        for name in ("Print designer 6.xlsx", "Other.xlsx"):
+            path = Path(self.tmp.name) / name
+            path.write_bytes(build([SheetSpec("S", {"A1": 1, "B1": name, "A3": 2, "B3": "Second"})]))
+            ids.append(workbooks.import_workbook(self.db, path).workbook_id)
         selected = []
         setup.workbook_selected.connect(selected.append)
-        setup.set_workbooks([WorkbookEntry(1, "Print designer 6.xlsx", "2 sheets"), WorkbookEntry(2, "Other.xlsx")],
-                            select_id=2)
-        self.assertEqual(selected, [2])
+        setup.set_workbooks([WorkbookEntry(ids[0], "Print designer 6.xlsx", "2 sheets"), WorkbookEntry(ids[1], "Other.xlsx")],
+                            select_id=ids[1])
+        self.assertEqual(selected, [ids[1]])
         self.assertTrue(setup.enter_button.isEnabled())
         setup.workbooks.setCurrentRow(0)
         setup.enter_button.click()
         self.assertIs(window.pages.currentWidget(), window.designer_workspace)
-        self.assertEqual(window.designer_workspace.workbook_id, 1)
+        self.assertEqual(window.designer_workspace.workbook_id, ids[0])
         self.assertIn("Print designer 6.xlsx", window.designer_workspace.title.text())
         window.designer_workspace.change_button.click()
         self.assertIs(window.pages.currentWidget(), setup)
+
+    def test_missing_workbook_is_reported(self):
+        window = self.window()
+        window.set_mode(modes.DESIGN)
+        with mock.patch.object(QMessageBox, "warning") as warn:
+            window.open_designer_workspace(999)
+        warn.assert_called_once()
+        self.assertIs(window.pages.currentWidget(), window.designer_setup)
 
 
 if __name__ == "__main__":
