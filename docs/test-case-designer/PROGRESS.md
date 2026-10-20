@@ -4,9 +4,9 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
 
 ## Status
 
-- Done: Step 0 (exploration, plan, decisions below); M0; M1; M2; M3.
-- In progress: nothing. Waiting for the go-ahead on M4.
-- Next: M4 designer UI (backlog picker and search, notes, picture management, results table, editing, open questions).
+- Done: Step 0 (exploration, plan, decisions below); M0 to M4.
+- In progress: nothing. Waiting for the go-ahead on M5.
+- Next: M5 regenerate with history, tags, exports (JSON, CSV, Excel).
 
 | Milestone | Status |
 |---|---|
@@ -14,7 +14,7 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
 | M1 Upload-time workbook analysis | done (2026-10-19) |
 | M2 Settings, presets, prompt builder | done (2026-10-20) |
 | M3 Generation, validation, retry, golden fixtures | done (2026-10-20) |
-| M4 Designer UI | not started |
+| M4 Designer UI | done (2026-10-20) |
 | M5 Regenerate, history, tags, exports | not started |
 | M6 Send to Smoke / Regression, Copy as prompt | not started |
 
@@ -157,6 +157,30 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
     - The answers are kept in `tests/fixtures/designer/live/` (git-ignored) and re-checked offline.
 - Owner decision (M3): the prompt stays verbatim spec 7.1. Spec 4.5 asks for permission coverage, but 7.1 never says so, so the model asks about permissions in `open_questions` instead of inventing test cases. The golden check accepts either.
 - Not built here: the generation UI (progress, results table) is M4. The resolved model id is stored per run but not yet shown in the settings dialog.
+
+## M4 notes
+
+- Workspace (`src/wta/designer/workspace.py`), one per workbook:
+  - On the left: a sheet selector (each sheet, plus "All sheets"; it remembers the last sheet used per workbook), a search box and the backlog list. The list shows the text and picture counts and flags backlogs with no content or unfinished text.
+  - On the right, three tabs:
+    - **Backlog** (`backlog_panel.py`): the source text with its cells, the pictures as thumbnails (attach any picture of the workbook, detach, move left or right, view at full size), notes, supplementary context (another backlog's text from any uploaded workbook, or pasted text), and Generate / Cancel with progress.
+    - **Test cases** (`results_panel.py`): a table with columns that follow the preset. Every field can be edited in place: combo boxes for type, priority and basis, and a multi-line editor for the text fields. Lists are edited one item per line, and per-step style steps as `action => expected`. There are also a Locked checkbox, a warnings column, and Add, Duplicate, Delete, Up, Down and Renumber IDs.
+    - **Open questions** (`questions_panel.py`): answering a question saves the answer and adds `"<question> Answer: <answer>"` to the backlog's notes.
+- Search (`designer/search.py`) follows spec 3.4 and 3.5:
+  - It accepts `backlog 5`, `5`, `#5` and `BL-5`, and matches exactly.
+  - Not found shows "Backlog 12 not found in sheet …", lists the numbers that exist, and makes no model call.
+  - A number that appears twice opens a picker.
+  - Choosing a backlog on another sheet switches to "All sheets".
+  - A backlog with no content shows a notice, and Generate stays off until it has notes.
+- Storage (`src/wta/db/designer_content.py`, table `designer_backlog_context`):
+  - Notes and supplementary context are kept per backlog and sent with every generation.
+  - Test case edits apply to the current run, which is the newest valid one. An edit marks the case edited; deletes are soft (`deleted_at`).
+  - IDs change only on Renumber.
+- Generation in the app checks Claude Code sign-in first. Every outcome is stored. A valid answer opens the Test cases tab; an invalid answer or an error is shown in a message, and the raw answer is kept with the run.
+- Hidden pages of the main window are now ignored for sizing, so the wide workspace does not stop the window, or the Launchpad cards, from getting narrow.
+- New icons `arrow-up.svg` and `arrow-down.svg` (Lucide, ISC) for Up and Down.
+- Not built here (M5): regenerating with guidance and locked cases, restoring history, tag filtering, and exports.
+- Still to write before the end: `docs/test-case-designer/README.md` (the user guide is part of the definition of done).
 
 ## Open decisions
 

@@ -35,7 +35,8 @@ from wta.db import workbooks as workbook_store
 from wta.designer.settings_dialog import DesignerSettingsDialog
 from wta.designer.layout import LOW_CONFIDENCE
 from wta.designer.mapping_dialog import MappingDialog
-from wta.designer.setup_page import DesignerSetupPage, DesignerWorkspace, WorkbookEntry
+from wta.designer.setup_page import DesignerSetupPage, WorkbookEntry
+from wta.designer.workspace import DesignerWorkspace
 from wta.designer.summary import summary_html
 from wta.welcome import AboutDialog, WelcomePage
 from wta.housekeeping_dialog import HousekeepingDialog
@@ -185,13 +186,22 @@ class MainWindow(QMainWindow):
         self.designer_setup.workbook_selected.connect(self._show_workbook_summary)
         self.designer_setup.mapping_requested.connect(self.edit_workbook_mapping)
         self.designer_setup.settings_requested.connect(self.edit_designer_settings)
-        self.designer_workspace = DesignerWorkspace(self)
+        self.designer_workspace = DesignerWorkspace(db, self.app_dir / "designer-runs", self.app_dir / USAGE_FILE, self)
+        self.designer_workspace.generation_blocker = lambda: (
+            "" if self.top_bar.signed_in else "Claude Code must be installed and signed in (Help, Check setup).")
+        self.designer_workspace.remember = self._remember
+        self.designer_workspace.recall = lambda key: self._ui_state().value(key)
+        self.designer_workspace.status_message.connect(lambda text: self.statusBar().showMessage(text, 15000))
         self.designer_workspace.change_workbook_requested.connect(
             lambda: self.pages.setCurrentWidget(self.designer_setup))
         self.designer_workspace.settings_requested.connect(self.edit_designer_settings)
         self.pages = QStackedWidget()
         for page in (self.launchpad, self.designer_setup, self.designer_workspace, splitter):
             self.pages.addWidget(page)
+        # Like the tabs: only the shown page sets the minimum size, so a wide workspace does not stop the window
+        # (and the Launchpad's cards) from getting narrow.
+        self.pages.currentChanged.connect(lambda _index: self._size_by_current(self.pages))
+        self._size_by_current(self.pages)
 
         central = QWidget()
         layout = QVBoxLayout(central)
@@ -344,6 +354,11 @@ class MainWindow(QMainWindow):
         self.launchpad.set_last_mode(self.last_mode())
         self._update_mode_badges()
         self.launchpad.cards[modes.DESIGN].setFocus()
+
+    def _remember(self, key: str, value) -> None:
+        state = self._ui_state()
+        state.setValue(key, value)
+        state.sync()
 
     def last_mode(self) -> str | None:
         mode = self._ui_state().value("mode")
@@ -514,12 +529,17 @@ class MainWindow(QMainWindow):
     def _size_tabs_by_current(self, _index: int = -1) -> None:
         """Size the tab area by the shown tab only (hidden pages get Ignored), so the tall Runs
         tab does not make Scenarios scroll as a whole; each section's list scrolls on its own."""
-        current = self.tabs.currentWidget()
-        for i in range(self.tabs.count()):
-            page = self.tabs.widget(i)
+        self._size_by_current(self.tabs)
+
+    @staticmethod
+    def _size_by_current(stack) -> None:
+        """Hidden pages of a tab or stacked widget get the Ignored size policy, so they count as 0."""
+        current = stack.currentWidget()
+        for i in range(stack.count()):
+            page = stack.widget(i)
             policy = QSizePolicy.Policy.Preferred if page is current else QSizePolicy.Policy.Ignored
             page.setSizePolicy(policy, policy)
-        self.tabs.updateGeometry()
+        stack.updateGeometry()
 
     def run_current_tab(self) -> None:
         """Toolbar Run: the batch on the Scenarios or Smoke test tab, whichever is showing (Scenarios otherwise)."""

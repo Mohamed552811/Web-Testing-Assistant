@@ -142,36 +142,3 @@ class DesignerSetupPage(QWidget):
         if self.selected_id() is not None:
             self.workspace_requested.emit(self.selected_id())
 
-
-class DesignerWorkspace(QWidget):
-    """The designer's workspace for one workbook. Backlog picker, generation and results arrive in M1–M5."""
-
-    change_workbook_requested = Signal()
-    settings_requested = Signal()
-
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent)
-        self.workbook_id: int | None = None
-        self.title = QLabel("Test Case Design")
-        self.title.setProperty("heading", True)
-        self.change_button = QPushButton("Change workbook")
-        icons.set_icon(self.change_button, "folder-open")
-        self.change_button.clicked.connect(self.change_workbook_requested)
-        self.settings_button = QPushButton("Settings…")
-        icons.set_icon(self.settings_button, "settings")
-        self.settings_button.clicked.connect(self.settings_requested)
-        header = QHBoxLayout()
-        header.addWidget(self.title, 1)
-        header.addWidget(self.settings_button)
-        header.addWidget(self.change_button)
-        self.body = QLabel("Backlog selection and test case generation will appear here.")
-        self.body.setProperty("muted", True)
-        self.body.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 16, 24, 16)
-        layout.addLayout(header)
-        layout.addWidget(self.body, 1)
-
-    def set_workbook(self, workbook_id: int, name: str) -> None:
-        self.workbook_id = workbook_id
-        self.title.setText(f"Test Case Design — {name}")

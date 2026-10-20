@@ -130,6 +130,47 @@ def validate(data, settings: DesignerSettings, backlog_key: str) -> ValidationRe
     return result
 
 
+def case_warnings(cases: list[dict], settings: DesignerSettings, backlog_key: str) -> list[list[str]]:
+    """Warnings per test case for the editor (spec 8.1 (7)): title prefix, an "Assert that" check, order,
+    vocabulary, unique titles and IDs in sequence. Edits are never blocked by these."""
+    preset = settings.preset()
+    vocabulary = set(settings.tag_vocabulary)
+    number = key_digits(backlog_key) if any(ch.isdigit() for ch in backlog_key) else None
+    titles = [str(c.get("title", "")).strip().lower() for c in cases]
+    seen_corner = False
+    result = []
+    for index, case in enumerate(cases):
+        warnings = []
+        title = str(case.get("title", "")).strip()
+        if not title.startswith(preset.title_prefix + " "):
+            warnings.append(f"Title should start with \"{preset.title_prefix}\".")
+        if len(title) > 120:
+            warnings.append("Title is longer than 120 characters.")
+        if titles.count(title.lower()) > 1:
+            warnings.append("Another test case has the same title.")
+        steps = case.get("steps") or []
+        if preset.steps_style == PER_STEP_EXPECTED:
+            if not any(isinstance(s, dict) and str(s.get("expected", "")).strip() for s in steps):
+                warnings.append("No step has an expected check.")
+        elif not any(isinstance(s, str) and s.startswith(ASSERT_PREFIX) for s in steps):
+            warnings.append(f"No step starts with \"{ASSERT_PREFIX}\".")
+        if not str(case.get("expected_result", "")).strip():
+            warnings.append("Expected result is empty.")
+        if case.get("type") == "corner_case":
+            seen_corner = True
+        elif seen_corner:
+            warnings.append("Happy paths should come before corner cases.")
+        if preset.includes("tags"):
+            unknown = [t for t in case.get("tags") or [] if t not in vocabulary]
+            if unknown:
+                warnings.append(f"Tags not in the vocabulary: {', '.join(unknown)}.")
+        if number is not None and case.get("id") != expected_id(preset.id_prefix, preset.backlog_pad,
+                                                                 preset.seq_pad, number, index + 1):
+            warnings.append("ID is out of sequence (use Renumber).")
+        result.append(warnings)
+    return result
+
+
 def feedback(errors: list[str], limit: int = 25) -> str:
     """The retry note appended to the user message (spec 7.3)."""
     shown = errors[:limit]

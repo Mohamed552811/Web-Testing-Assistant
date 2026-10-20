@@ -130,6 +130,20 @@ class Image(Base):
     __table_args__ = (UniqueConstraint("workbook_id", "label", name="uq_image_label"),)
 
 
+class BacklogContext(Base):
+    """Notes and supplementary context the user adds to a backlog (spec 8.1 (3)); sent with every generation."""
+
+    __tablename__ = "designer_backlog_context"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    backlog_item_id: Mapped[int] = mapped_column(ForeignKey("designer_backlog.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(20))  # domain_note | supplementary
+    text: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(Text, default="")  # where supplementary text came from, e.g. "Backlog 3"
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class GenerationRun(Base):
     """One generation for one backlog (spec 8.2 generation_run), with what produced it."""
 
