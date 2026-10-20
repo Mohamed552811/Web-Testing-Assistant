@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from wta import __version__
-from wta import accessibility, cdp, compare, cost, fixtures, housekeeping, icons, test_data, theme
+from wta import accessibility, cdp, compare, cost, fixtures, housekeeping, icons, notify, test_data, theme
 from wta import settings as app_settings
 from wta import launchpad as modes
 from wta.db import designer_settings
@@ -202,6 +202,8 @@ class MainWindow(QMainWindow):
         self.designer_workspace.tester_name = lambda: self.settings.tester_name
         self.designer_workspace.status_message.connect(lambda text: self.statusBar().showMessage(text, 15000))
         self.designer_workspace.checklist_created.connect(self.open_checklist_run)
+        self.designer_workspace.generation_finished.connect(
+            lambda heading, message, warning: self.notifier.notify(heading, message, warning))
         self.designer_workspace.change_workbook_requested.connect(
             lambda: self.pages.setCurrentWidget(self.designer_setup))
         self.designer_workspace.settings_requested.connect(self.edit_designer_settings)
@@ -1182,6 +1184,8 @@ def main(argv: list[str] | None = None) -> int:
         return self_check.run(report, check_app)
     cdp_port = cdp.find_free_port()
     _set_windows_app_id()  # before any window: the taskbar then shows our logo, not Python's
+    # Our name and logo on Windows notifications (not "Python"), kept in the notification center.
+    notify.register_app_identity(APP_USER_MODEL_ID, APP_TITLE, icons.ASSETS / "logo.png")
     app = QApplication(argv + cdp.enable(cdp_port))  # must happen before QApplication
     app.setApplicationName(APP_TITLE)
     app.setWindowIcon(icons.logo_icon())

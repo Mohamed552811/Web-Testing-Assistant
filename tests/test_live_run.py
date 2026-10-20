@@ -210,6 +210,54 @@ class NotifierTests(unittest.TestCase):
         self.notifier.tray.hide()
 
 
+    def test_windows_toast_under_our_own_identity(self):
+        import base64
+        from wta import notify
+        xml = notify.toast_xml("Run <done>", "Tom's & Jerry's run")
+        self.assertIn("Run &lt;done&gt;", xml)
+        self.assertIn("Tom's &amp; Jerry's run", xml)
+        self.assertNotIn("scenario=", xml)
+        self.assertIn('scenario="reminder"', notify.toast_xml("Confirm", "x", warning=True))
+        command = notify.toast_command("WebTestingAssistant.App", xml)
+        self.assertEqual(command[0], "powershell.exe")
+        script = base64.b64decode(command[-1]).decode("utf-16-le")
+        self.assertIn("CreateToastNotifier('WebTestingAssistant.App')", script)
+        self.assertIn("Tom''s &amp; Jerry''s run", script)  # quotes doubled inside the PowerShell string
+        with mock.patch.object(notify, "_toast_app_id", "WebTestingAssistant.App"),                 mock.patch.object(notify.subprocess, "run", return_value=mock.Mock(returncode=0)) as run,                 mock.patch.object(notify.threading, "Thread", side_effect=lambda target, daemon: mock.Mock(
+                    start=target)),                 mock.patch.object(QSystemTrayIcon, "showMessage") as tray,                 mock.patch.object(QApplication, "alert"):
+            self.notifier.run_started()
+            self.notifier.notify("Run finished", "1 scenario")
+            self.assertIsNone(self.notifier.tray)  # toasts need no tray icon
+            run.assert_called_once()
+            tray.assert_not_called()
+            run.return_value = mock.Mock(returncode=1)  # toast failed: the tray message is the fallback
+            with mock.patch.object(Notifier, "available", return_value=True):
+                self.notifier.notify("Run finished", "again")
+                app.processEvents()
+            tray.assert_called_once()
+            self.notifier.tray.hide()
+
+    def test_register_identity_writes_name_and_logo(self):
+        from wta import notify
+        if os.name != "nt":
+            self.skipTest("Windows only")
+        written = {}
+
+        class Key:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        import winreg
+        with mock.patch.object(winreg, "CreateKey", return_value=Key()) as create,                 mock.patch.object(winreg, "SetValueEx", side_effect=lambda _k, name, _r, _t, value:
+                                  written.__setitem__(name, value)),                 mock.patch.object(notify, "_toast_app_id", None):
+            self.assertTrue(notify.register_app_identity("Test.App", "Web Testing Assistant", Path("logo.png")))
+            self.assertEqual(notify._toast_app_id, "Test.App")
+        self.assertTrue(create.call_args.args[1].endswith(r"AppUserModelId\Test.App"))
+        self.assertEqual(written, {"DisplayName": "Web Testing Assistant", "IconUri": "logo.png"})
+
 class AppTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

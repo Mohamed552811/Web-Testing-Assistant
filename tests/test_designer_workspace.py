@@ -286,9 +286,12 @@ class WorkspaceTests(Fixture):
         content.add_context(self.db, self.orders.id, content.DOMAIN_NOTE, "Managers only.")
         FakeRun.answer = CallResult(structured=response(case(1), case(2, "corner_case"), questions=["Which formats?"]),
                                     subtype="success", model="claude-opus-5-5")
+        notified = []
+        w.generation_finished.connect(lambda *args: notified.append(args))
         with mock.patch.object(workspace_module, "GenerationRun", FakeRun):
             w.backlog_panel.generate_button.click()
             self.wait(lambda: w.run is None)
+        self.assertEqual(notified, [("Test cases ready", "Backlog 7: 2 test case(s), 1 open question(s).", False)])
         [run] = FakeRun.created
         self.assertEqual(run.request.domain_notes, ["Managers only."])
         self.assertEqual([i.image_id for i in run.request.images], ["IMG-02"])
@@ -341,11 +344,15 @@ class WorkspaceTests(Fixture):
         self.assertEqual(FakeRun.created, [])
         w.generation_blocker = lambda: ""
         FakeRun.answer = CallResult(process_error="Claude Code could not be started.")
+        notified = []
+        w.generation_finished.connect(lambda *args: notified.append(args))
         with mock.patch.object(QMessageBox, "warning") as warn, \
                 mock.patch.object(workspace_module, "GenerationRun", FakeRun):
             w.generate()
             self.wait(lambda: w.run is None)
         self.assertIn("could not be started", warn.call_args.args[2])
+        self.assertEqual(notified[0][0], "Generation needs your attention")
+        self.assertTrue(notified[0][2])
         self.assertEqual(generations.list_runs(self.db, self.orders.id)[0].status, "error")
         self.assertEqual(w.results_panel.model.cases, [])
 

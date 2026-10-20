@@ -47,6 +47,7 @@ class DesignerWorkspace(QWidget):
     change_workbook_requested = Signal()
     settings_requested = Signal()
     status_message = Signal(str)
+    generation_finished = Signal(str, str, bool)  # heading, message, warning: for a Windows notification
     checklist_created = Signal(str, int)  # mode, run id: the main window can open it
 
     def __init__(self, db: Database | None = None, work_root: Path | None = None, usage_path: Path | None = None,
@@ -320,6 +321,16 @@ class DesignerWorkspace(QWidget):
         self.backlog_panel.set_running(False, "")
         if backlog_id == self.current_backlog_id():
             self._backlog_chosen(self.backlogs.currentItem())
+        # Generation takes minutes: tell the user, also when they are in another window.
+        number = next((b.number for s in (self.view.sheets if self.view else []) for b in s.backlogs
+                       if b.id == backlog_id), "")
+        if outcome.ok:
+            self.generation_finished.emit(
+                "Test cases ready", f"Backlog {number}: {len(outcome.response.get('test_cases') or [])} test "
+                f"case(s), {len(outcome.response.get('open_questions') or [])} open question(s).", False)
+        else:
+            self.generation_finished.emit("Generation needs your attention", f"Backlog {number}: {outcome.message}",
+                                          True)
         if outcome.ok:
             if backlog_id == self.current_backlog_id():
                 self.backlog_panel.guidance.clear()
