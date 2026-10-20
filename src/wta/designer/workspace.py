@@ -444,7 +444,9 @@ class DesignerWorkspace(QWidget):
             cases = [checklists.HandOffCase(c.row_id, backlog_id, c.data) for backlog_id, c in everything
                      if dialog.tag() in (c.data.get("tags") or [])]
         if kind == PROMPT:
-            text = handoff.copy_as_prompt(dialog.mode(), [c.data for c in cases], designer_settings.load(self.db))
+            text = handoff.copy_as_prompt(dialog.mode(), [c.data for c in cases],
+                                          designer_settings.load(self.db).with_product_context(
+                                              self.view.product_context if self.view else ""))
             QGuiApplication.clipboard().setText(text)
             self.status_message.emit(f"Copied a {dialog.mode()} checklist prompt with {len(cases)} test case(s).")
             return

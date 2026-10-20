@@ -16,6 +16,11 @@ def summary_html(view: WorkbookView) -> str:
              f"<p>Uploaded {view.uploaded_at.replace(tzinfo=UTC).astimezone():%Y-%m-%d %H:%M} · "
              f"{len(view.sheets)} sheet(s) · "
              f"{view.backlog_count} backlog(s) · {len(view.images)} picture(s)</p>"]
+    if view.product_context:
+        parts.append(f"<p><b>Product context:</b> {escape(view.product_context)}</p>")
+    else:
+        parts.append("<p><b>Product context:</b> not set. Add it with Edit mapping, so the test cases are written "
+                     "for this product.</p>")
     if view.warnings:
         parts.append("<p><b>Workbook warnings</b></p>" + _list(view.warnings))
     if view.changes is not None:

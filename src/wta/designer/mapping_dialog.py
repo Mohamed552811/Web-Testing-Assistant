@@ -1,12 +1,15 @@
-"""Manual mapping override (spec 3.7 step 7): which columns and rows hold the backlogs of a sheet."""
+"""Manual mapping override (spec 3.7 step 7): which columns and rows hold the backlogs of a sheet,
+and the workbook's product context (what the app under test is)."""
 
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGroupBox,
     QLabel,
     QLineEdit,
+    QPlainTextEdit,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -30,7 +33,8 @@ def _columns(text: str) -> list[int]:
 class MappingDialog(QDialog):
     """Pick a sheet and set its mapping. result_mapping() is None when "Use automatic detection" was chosen."""
 
-    def __init__(self, sheets: list[SheetView], sheet_id: int | None = None, parent=None) -> None:
+    def __init__(self, sheets: list[SheetView], sheet_id: int | None = None, parent=None,
+                 product_context: str = "") -> None:
         super().__init__(parent)
         self.setWindowTitle("Backlog mapping")
         self.sheets = sheets
@@ -48,6 +52,12 @@ class MappingDialog(QDialog):
         self.header_spin = QSpinBox(minimum=0, maximum=MAX_ROW, specialValueText="none")
         self.first_spin = QSpinBox(minimum=0, maximum=MAX_ROW, specialValueText="start of sheet")
         self.last_spin = QSpinBox(minimum=0, maximum=MAX_ROW, specialValueText="end of sheet")
+        self.context_edit = QPlainTextEdit(product_context)
+        self.context_edit.setFixedHeight(64)
+        self.context_edit.setPlaceholderText("What the app under test is, e.g. an ERP 'Print' app (print designs, "
+                                             "print settings, templates, …)")
+        self.context_edit.setToolTip("Fills \"the product backlogs of …\" in the prompt for every backlog of this "
+                                     "workbook. New versions of the workbook start with it.")
         self.error = QLabel()
         self.error.setStyleSheet("color: #c0392b;")
         self.error.hide()
@@ -73,9 +83,16 @@ class MappingDialog(QDialog):
         intro = QLabel("Columns are letters as in Excel. Formula cells are never read as backlog data.")
         intro.setWordWrap(True)
         intro.setProperty("muted", True)
+        context_box = QGroupBox("Product context (whole workbook)")
+        context_layout = QVBoxLayout(context_box)
+        context_layout.addWidget(self.context_edit)
+        sheet_box = QGroupBox("Backlogs on the sheet")
+        sheet_layout = QVBoxLayout(sheet_box)
+        sheet_layout.addWidget(intro)
+        sheet_layout.addLayout(form)
         layout = QVBoxLayout(self)
-        layout.addWidget(intro)
-        layout.addLayout(form)
+        layout.addWidget(context_box)
+        layout.addWidget(sheet_box)
         layout.addWidget(self.error)
         layout.addWidget(buttons)
 
@@ -123,6 +140,9 @@ class MappingDialog(QDialog):
             raise ValueError("The last row is before the first row.")
         return Mapping(TABLE if table else BLOCK, number, title, description, status,
                        self.header_spin.value() if table else None, first, last)
+
+    def product_context(self) -> str:
+        return self.context_edit.toPlainText().strip()
 
     def result_mapping(self) -> Mapping | None:
         return None if self._reset else self.mapping()

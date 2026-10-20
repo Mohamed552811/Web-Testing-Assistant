@@ -61,7 +61,8 @@ class DesignerSetupPage(QWidget):
         self.enter_button.setEnabled(False)
         self.mapping_button = QPushButton("Edit mapping…")
         icons.set_icon(self.mapping_button, "pencil")
-        self.mapping_button.setToolTip("Set which columns and rows hold the backlogs, if the detection is wrong")
+        self.mapping_button.setToolTip("Describe the product under test, and set which columns and rows hold the "
+                                       "backlogs if the detection is wrong")
         self.mapping_button.setEnabled(False)
 
         left = QVBoxLayout()

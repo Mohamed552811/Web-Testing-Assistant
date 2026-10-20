@@ -25,7 +25,7 @@ SPEC = Path(__file__).resolve().parent.parent / "docs" / "test-case-designer" / 
 def with_preset(**changes) -> DesignerSettings:
     settings = DesignerSettings()
     preset = OutputPreset(name="Custom", **changes)
-    settings.output_presets.append(preset)
+    settings.output_presets[1] = preset  # the always-present editable Custom preset
     settings.output_preset = "Custom"
     return settings
 
@@ -46,6 +46,12 @@ class SettingsTests(unittest.TestCase):
             "output_preset": "Default",
             "output_presets": [
                 {"name": "Default", "builtin": True,
+                 "optional_fields": {"tags": True, "preconditions": True, "basis": True, "source_reference": True},
+                 "id_pattern": {"prefix": "TC", "backlog_pad": 3, "seq_pad": 2},
+                 "priority_labels": ["High", "Medium", "Low"],
+                 "steps_style": "steps_with_single_expected",
+                 "title_prefix": "Verify that"},
+                {"name": "Custom", "builtin": False,
                  "optional_fields": {"tags": True, "preconditions": True, "basis": True, "source_reference": True},
                  "id_pattern": {"prefix": "TC", "backlog_pad": 3, "seq_pad": 2},
                  "priority_labels": ["High", "Medium", "Low"],
@@ -74,9 +80,9 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(loaded.merge_max_steps, 15)
         self.assertEqual(loaded.ui_testing_policy, "exclude_visual_only")
         self.assertEqual(loaded.tag_vocabulary, ["smoke", "regression", "permissions"])  # rule tags kept first
-        self.assertEqual([p.name for p in loaded.output_presets], ["Default", "Jira"])
+        self.assertEqual([p.name for p in loaded.output_presets], ["Default", "Custom", "Jira"])
         self.assertEqual(loaded.output_presets[0].title_prefix, "Verify that")  # built-in comes from the code
-        jira = loaded.output_presets[1]
+        jira = loaded.output_presets[2]
         self.assertEqual((jira.id_prefix, jira.backlog_pad, jira.seq_pad), ("PD", 0, 2))
         self.assertEqual(jira.priority_labels, ("P1", "P2", "P3"))
         self.assertEqual((jira.steps_style, jira.title_prefix), (default.preset().steps_style, "Verify that"))
@@ -89,7 +95,8 @@ class SettingsTests(unittest.TestCase):
         settings = DesignerSettings(tag_vocabulary=["smoke"], product_context=" ", model_mode=PINNED,
                                     pinned_model_id=None)
         text = " ".join(settings.problems())
-        for expected in ("product context", "\"smoke\" and \"regression\"", "model id"):
+        self.assertNotIn("product context", text)  # set per workbook now; the settings value is only a fallback
+        for expected in ("\"smoke\" and \"regression\"", "model id"):
             self.assertIn(expected, text)
         self.assertEqual(DesignerSettings().cli_model(), "opus")
         self.assertEqual(DesignerSettings(model_mode=PINNED, pinned_model_id="claude-opus-5-5").cli_model(),
@@ -107,7 +114,7 @@ class SettingsTests(unittest.TestCase):
                 loaded = designer_settings.load(db)
                 self.assertFalse(loaded.merge_same_flow)
                 self.assertEqual(loaded.preset().id_prefix, "PD")
-                bad = DesignerSettings(product_context="")
+                bad = DesignerSettings(tag_vocabulary=["smoke"])
                 with self.assertRaises(ValueError):
                     designer_settings.save(db, bad)
                 snap = snapshot(loaded)

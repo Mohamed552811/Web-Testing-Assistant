@@ -1,4 +1,4 @@
-"""The Test Case Design settings dialog: rules, tags, output presets, model, product context."""
+"""The Test Case Design settings dialog: rules, tags, output presets and model."""
 
 import os
 import tempfile
@@ -37,7 +37,8 @@ class SettingsDialogTests(unittest.TestCase):
         self.assertTrue(d.merge_check.isChecked())
         self.assertEqual(d.merge_steps_spin.value(), 15)
         self.assertEqual(d.vocabulary_edit.text(), "smoke, regression")
-        self.assertEqual(d.language_label.text(), "English")
+        self.assertEqual(d.language_combo.currentText(), "English")
+        self.assertFalse(d.language_combo.isEnabled())  # until more languages are added
         self.assertTrue(d.latest_radio.isChecked())
         self.assertFalse(d.preset_fields.isEnabled())  # built-in Default is read-only
         self.assertFalse(d.delete_preset_button.isEnabled())
@@ -58,7 +59,7 @@ class SettingsDialogTests(unittest.TestCase):
         d.field_checks["basis"].setChecked(False)
         self.assertIn("PD-3-2", d.id_example.text())
         d.preset_combo.setCurrentIndex(0)  # switch away and back: the edits stay
-        d.preset_combo.setCurrentIndex(1)
+        d.preset_combo.setCurrentIndex(2)
         self.assertEqual(d.prefix_edit.text(), "PD")
         settings = d.settings()
         preset = settings.preset()
@@ -67,7 +68,28 @@ class SettingsDialogTests(unittest.TestCase):
         self.assertFalse(preset.includes("basis"))
         self.assertEqual(settings.output_presets[0].id_prefix, "TC")  # Default untouched
         d.delete_preset_button.click()
-        self.assertEqual([p.name for p in d.settings().output_presets], ["Default"])
+        self.assertEqual([p.name for p in d.settings().output_presets], ["Default", "Custom"])
+
+    def test_custom_preset_is_editable_but_kept(self):
+        d = self.dialog
+        self.assertEqual([d.preset_combo.itemData(i) for i in range(d.preset_combo.count())], ["Default", "Custom"])
+        d.preset_combo.setCurrentIndex(1)
+        self.assertTrue(d.preset_fields.isEnabled())
+        self.assertFalse(d.builtin_note.isVisibleTo(d))
+        self.assertFalse(d.delete_preset_button.isEnabled())  # Custom is always there
+        d.prefix_edit.setText("QA")
+        d.priority_combo.setCurrentIndex(1)
+        d.steps_combo.setCurrentIndex(d.steps_combo.findData(PER_STEP_EXPECTED))
+        d.title_edit.setText("Check that")
+        settings = d.settings()
+        preset = settings.preset()
+        self.assertEqual((settings.output_preset, preset.id_prefix, preset.title_prefix), ("Custom", "QA", "Check that"))
+        self.assertEqual(preset.priority_labels, ("P1", "P2", "P3"))
+        again = DesignerSettings.from_json(settings.to_json())  # stored and loaded back
+        self.assertEqual((again.output_preset, again.preset().id_prefix), ("Custom", "QA"))
+        self.assertEqual([p.name for p in again.output_presets], ["Default", "Custom"])
+        d.preset_combo.setCurrentIndex(0)
+        self.assertFalse(d.preset_fields.isEnabled())
 
     def test_rules_model_and_validation(self):
         d = self.dialog
@@ -78,12 +100,12 @@ class SettingsDialogTests(unittest.TestCase):
         d.vocabulary_edit.setText("smoke, Regression, permissions")
         d.pinned_radio.setChecked(True)
         d.pinned_edit.setText("claude-opus-5-5")
-        d.context_edit.setPlainText("a CRM app")
         s = d.settings()
         self.assertEqual((s.merge_same_flow, s.avoid_heavy_and_performance, s.ui_testing_policy),
                          (False, False, "include_ui"))
         self.assertEqual(s.tag_vocabulary, ["smoke", "regression", "permissions"])
-        self.assertEqual((s.model_mode, s.cli_model(), s.product_context), (PINNED, "claude-opus-5-5", "a CRM app"))
+        self.assertEqual((s.model_mode, s.cli_model()), (PINNED, "claude-opus-5-5"))
+        self.assertFalse(hasattr(d, "context_edit"))  # product context is per workbook, set with its mapping
         d.vocabulary_edit.setText("permissions")
         d._accept()
         self.assertTrue(d.error.isVisibleTo(d))

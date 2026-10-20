@@ -76,6 +76,7 @@ class WorkbookView:
     warnings: list[str]
     sheets: list[SheetView]
     images: list[ImageView]
+    product_context: str = ""
 
     @property
     def backlog_count(self) -> int:
@@ -129,7 +130,8 @@ def import_workbook(db: Database, path: Path | str) -> ImportResult:
         previous = orm.scalar(select(Workbook).where(Workbook.family == family).order_by(Workbook.id.desc()))
         count = orm.scalar(select(func.count()).select_from(Workbook).where(Workbook.family == family))
         workbook = Workbook(file_name=path.name, sha256=raw.sha256, family=family, version_label=f"v{count + 1}",
-                            previous_id=previous.id if previous else None, warnings=analysis.warnings, data=data)
+                            previous_id=previous.id if previous else None, warnings=analysis.warnings, data=data,
+                            product_context=previous.product_context if previous else None)
         orm.add(workbook)
         orm.flush()
         images = _store_images(orm, workbook, analysis)
@@ -265,7 +267,22 @@ def load_workbook(db: Database, workbook_id: int) -> WorkbookView:
                   for s in workbook.sheets]
         return WorkbookView(workbook.id, workbook.file_name, workbook.version_label, workbook.uploaded_at,
                             workbook.previous_id, workbook.changes, list(workbook.warnings or []), sheets,
-                            [_image_view(i) for i in workbook.images])
+                            [_image_view(i) for i in workbook.images], workbook.product_context or "")
+
+
+def set_product_context(db: Database, workbook_id: int, text: str) -> None:
+    """The product the workbook's backlogs describe; later versions of the workbook start with it."""
+    with db.Session() as orm, orm.begin():
+        workbook = orm.get(Workbook, workbook_id)
+        if workbook is None:
+            raise LookupError(f"Workbook {workbook_id} not found")
+        workbook.product_context = text.strip() or None
+
+
+def product_context_of_backlog(db: Database, backlog_id: int) -> str:
+    with db.Session() as orm:
+        item = orm.get(BacklogItem, backlog_id)
+        return (item.sheet.workbook.product_context or "") if item is not None else ""
 
 
 def list_workbooks(db: Database) -> list[WorkbookListEntry]:

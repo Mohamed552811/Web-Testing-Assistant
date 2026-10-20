@@ -22,6 +22,7 @@ def request_for_backlog(db: Database, backlog_id: int, settings: DesignerSetting
                         ) -> GenerationRequest:
     """A request with the backlog's text and its attached pictures (real image bytes, in attachment order)."""
     backlog = wb.load_backlog(db, backlog_id)
+    settings = settings.with_product_context(wb.product_context_of_backlog(db, backlog_id))
     with db.Session() as orm:
         item = orm.get(BacklogItem, backlog_id)
         sheet_name = item.sheet.name

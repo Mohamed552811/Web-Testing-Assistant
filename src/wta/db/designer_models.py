@@ -28,6 +28,8 @@ class Workbook(Base):
     changes: Mapped[dict | None] = mapped_column(JSON)
     warnings: Mapped[list[str]] = mapped_column(JSON, default=list)
     data: Mapped[bytes] = deferred(mapped_column(LargeBinary))  # the original file, for re-analysis
+    # What the product under test is (fills "the product backlogs of …" in the prompt); set with the mapping.
+    product_context: Mapped[str | None] = mapped_column(Text)
 
     sheets: Mapped[list["Sheet"]] = relationship(
         back_populates="workbook", cascade="all, delete-orphan", order_by="Sheet.position"

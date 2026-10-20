@@ -1,4 +1,6 @@
-"""Test Case Designer settings (spec 8.3): generation rules, tags, output presets (5.4), model, product context."""
+"""Test Case Designer settings (spec 8.3): generation rules, tags, output presets (5.4) and model.
+
+The product context is per workbook (set with its mapping), not here."""
 
 import copy
 
@@ -14,7 +16,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QPlainTextEdit,
     QPushButton,
     QRadioButton,
     QSpinBox,
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from wta.designer.settings import (
+    CUSTOM_PRESET_NAME,
     LATEST_OPUS,
     MAX_PADDING,
     MERGE_STEPS_RANGE,
@@ -78,8 +80,10 @@ class DesignerSettingsDialog(QDialog):
         tags_box.setLayout(tags)
 
         # Output (spec 5.4)
-        self.language_label = QLabel(OUTPUT_LANGUAGE)
-        self.language_label.setToolTip("Test cases are always written in English")
+        self.language_combo = QComboBox()
+        self.language_combo.addItem(OUTPUT_LANGUAGE)
+        self.language_combo.setEnabled(False)  # until more languages are supported
+        self.language_combo.setToolTip("Test cases are written in English; more languages will be added later")
         self.preset_combo = QComboBox()
         self.save_preset_button = QPushButton("Save as new preset…")
         self.delete_preset_button = QPushButton("Delete preset")
@@ -123,10 +127,12 @@ class DesignerSettingsDialog(QDialog):
         preset_form.addRow("Priority labels", self.priority_combo)
         preset_form.addRow("Steps style", self.steps_combo)
         preset_form.addRow("Title prefix", self.title_edit)
-        self.builtin_note = QLabel("The built-in Default preset cannot be changed; save a copy as a new preset.")
+        self.builtin_note = QLabel("The built-in Default preset cannot be changed. Choose Custom to set your own "
+                                   "ID pattern, priority labels, steps style and title prefix.")
+        self.builtin_note.setWordWrap(True)
         self.builtin_note.setProperty("muted", True)
         output = QFormLayout()
-        output.addRow("Output language", self.language_label)
+        output.addRow("Output language", self.language_combo)
         output.addRow("Output preset", preset_row)
         output.addRow(self.builtin_note)
         output.addRow(self.preset_fields)
@@ -146,15 +152,6 @@ class DesignerSettingsDialog(QDialog):
         model_box = QGroupBox("Model")
         model_box.setLayout(model)
 
-        # Product context
-        self.context_edit = QPlainTextEdit()
-        self.context_edit.setFixedHeight(60)
-        self.context_edit.setPlaceholderText("What the app under test is, e.g. an ERP 'Print' app (print designs, …)")
-        context = QVBoxLayout()
-        context.addWidget(self.context_edit)
-        context_box = QGroupBox("Product context (fills \"the product backlogs of …\" in the prompt)")
-        context_box.setLayout(context)
-
         self.error = QLabel()
         self.error.setWordWrap(True)
         self.error.setStyleSheet("color: #c0392b;")
@@ -164,7 +161,7 @@ class DesignerSettingsDialog(QDialog):
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
-        for box in (rules_box, tags_box, output_box, model_box, context_box):
+        for box in (rules_box, tags_box, output_box, model_box):
             layout.addWidget(box)
         layout.addWidget(self.error)
         layout.addWidget(buttons)
@@ -196,7 +193,6 @@ class DesignerSettingsDialog(QDialog):
         self.pinned_radio.setChecked(s.model_mode == PINNED)
         self.pinned_edit.setText(s.pinned_model_id or "")
         self.pinned_edit.setEnabled(s.model_mode == PINNED)
-        self.context_edit.setPlainText(s.product_context)
         self._fill_presets(s.output_preset)
 
     def _fill_presets(self, select: str) -> None:
@@ -204,7 +200,8 @@ class DesignerSettingsDialog(QDialog):
         self.preset_combo.blockSignals(True)
         self.preset_combo.clear()
         for preset in self._settings.output_presets:
-            self.preset_combo.addItem(preset.name + (" (built-in)" if preset.builtin else ""), preset.name)
+            suffix = " (built-in)" if preset.builtin else " (your own format)" if preset.name == CUSTOM_PRESET_NAME else ""
+            self.preset_combo.addItem(preset.name + suffix, preset.name)
         index = max(0, self.preset_combo.findData(select))
         self.preset_combo.setCurrentIndex(index)
         self.preset_combo.blockSignals(False)
@@ -223,7 +220,7 @@ class DesignerSettingsDialog(QDialog):
         self.title_edit.setText(preset.title_prefix)
         self.preset_fields.setEnabled(not preset.builtin)
         self.builtin_note.setVisible(preset.builtin)
-        self.delete_preset_button.setEnabled(not preset.builtin)
+        self.delete_preset_button.setEnabled(not preset.builtin and preset.name != CUSTOM_PRESET_NAME)
         self._update_example()
 
     def _form_preset(self, name: str, builtin: bool = False) -> OutputPreset:
@@ -265,7 +262,7 @@ class DesignerSettingsDialog(QDialog):
 
     def _delete_preset(self) -> None:
         index = self.preset_combo.currentIndex()
-        if self._settings.output_presets[index].builtin:
+        if self._settings.output_presets[index].builtin or self._settings.output_presets[index].name == CUSTOM_PRESET_NAME:
             return
         del self._settings.output_presets[index]
         self._fill_presets(self._settings.output_presets[0].name)
@@ -283,7 +280,6 @@ class DesignerSettingsDialog(QDialog):
         s.output_preset = self.preset_combo.currentData()
         s.model_mode = PINNED if self.pinned_radio.isChecked() else LATEST_OPUS
         s.pinned_model_id = self.pinned_edit.text().strip() or None
-        s.product_context = self.context_edit.toPlainText().strip()
         return s
 
     def _accept(self) -> None:

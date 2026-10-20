@@ -83,6 +83,8 @@ def _int(value, default: int, low: int, high: int) -> int:
 
 
 DEFAULT_PRESET = OutputPreset(name="Default", builtin=True)
+# Always present after Default: the user's own format, editable but never deleted or renamed.
+CUSTOM_PRESET_NAME = "Custom"
 
 
 @dataclass
@@ -94,10 +96,20 @@ class DesignerSettings:
     tag_suggestions: bool = True
     tag_vocabulary: list[str] = field(default_factory=lambda: list(REQUIRED_TAGS))
     output_preset: str = "Default"  # name of the selected preset
-    output_presets: list[OutputPreset] = field(default_factory=lambda: [copy.deepcopy(DEFAULT_PRESET)])
+    output_presets: list[OutputPreset] = field(default_factory=lambda: [
+        copy.deepcopy(DEFAULT_PRESET),
+        OutputPreset.from_json({**DEFAULT_PRESET.to_json(), "name": CUSTOM_PRESET_NAME, "builtin": False})])
     model_mode: str = LATEST_OPUS
     pinned_model_id: str | None = None
+    # Set per workbook (with its mapping); this value is only the fallback for a workbook without one.
     product_context: str = DEFAULT_PRODUCT_CONTEXT
+
+    def with_product_context(self, workbook_context: str) -> "DesignerSettings":
+        """A copy using the workbook's product context (this fallback when the workbook has none)."""
+        result = self.copy()
+        if workbook_context.strip():
+            result.product_context = workbook_context.strip()
+        return result
 
     @property
     def output_language(self) -> str:
@@ -114,8 +126,6 @@ class DesignerSettings:
     def problems(self) -> list[str]:
         """Why these settings cannot be saved as they are (shown in the dialog)."""
         found = []
-        if not self.product_context.strip():
-            found.append("Describe the product under test (product context).")
         if self.tag_suggestions and not set(REQUIRED_TAGS) <= set(self.tag_vocabulary):
             found.append("Tag suggestions need \"smoke\" and \"regression\" in the vocabulary.")
         if any(not _TAG.match(t) for t in self.tag_vocabulary):
@@ -157,7 +167,9 @@ class DesignerSettings:
             vocabulary = list(dict.fromkeys([*REQUIRED_TAGS, *vocabulary]))
         presets = [OutputPreset.from_json(p) for p in data.get("output_presets") or [] if isinstance(p, dict)]
         presets = [p for p in presets if not p.builtin]  # the built-in Default always comes from the code
-        names: set[str] = {DEFAULT_PRESET.name}
+        names: set[str] = {DEFAULT_PRESET.name, CUSTOM_PRESET_NAME}
+        custom = next((p for p in presets if p.name == CUSTOM_PRESET_NAME),
+                      OutputPreset.from_json({**DEFAULT_PRESET.to_json(), "name": CUSTOM_PRESET_NAME, "builtin": False}))
         unique = []
         for preset in presets:
             if preset.name not in names:
@@ -178,7 +190,7 @@ class DesignerSettings:
             tag_suggestions=suggest,
             tag_vocabulary=vocabulary,
             output_preset=selected if selected in names else DEFAULT_PRESET.name,
-            output_presets=[copy.deepcopy(DEFAULT_PRESET), *unique],
+            output_presets=[copy.deepcopy(DEFAULT_PRESET), custom, *unique],
             model_mode=mode,
             pinned_model_id=pinned if mode == PINNED else None,
             product_context=context.strip() if isinstance(context, str) and context.strip()

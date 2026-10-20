@@ -108,11 +108,12 @@ Open **Settings…** on the setup page or in the workspace.
 | Avoid performance and heavy test cases | on | No load, speed or large-data test cases |
 | UI testing policy | exclude visual-only | No checks of color, position or fonts; existence and behavior are tested |
 | Suggest tags | on (`smoke`, `regression`) | `smoke` on high-priority happy paths, `regression` on all; the vocabulary can be extended |
-| Output preset | Default | Optional fields, ID pattern (e.g. `TC-003-02` or `PD-3-2`), priority labels (High/Medium/Low or P1/P2/P3), steps style, title prefix. Save your own with **Save as new preset…** |
+| Output preset | Default | Optional fields, ID pattern (e.g. `TC-003-02` or `PD-3-2`), priority labels (High/Medium/Low or P1/P2/P3), steps style, title prefix. Default is fixed; choose **Custom** to edit them, or save more with **Save as new preset…** |
 | Model | latest Opus | Or a pinned model id |
-| Product context | the app under test | Describes the product to Claude; change it for other apps |
 
-Output is always in English.
+Output language is English (the list gets more languages later).
+
+The **product context** (what the app under test is) belongs to each workbook: set it with **Edit mapping…**. New versions of a workbook keep it, and the workbook summary shows it.
 
 ## Notes
 

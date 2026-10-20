@@ -15,7 +15,10 @@ from PySide6.QtWidgets import QDialog, QMessageBox  # noqa: E402
 from wta import launchpad as modes  # noqa: E402
 from wta.app import MainWindow  # noqa: E402
 from wta.db import Database  # noqa: E402
+from wta.db import generations  # noqa: E402
 from wta.db import workbooks as wb  # noqa: E402
+from wta.designer import prompt_builder as pb  # noqa: E402
+from wta.designer.settings import DesignerSettings  # noqa: E402
 from wta.designer.layout import BLOCK, TABLE, Mapping  # noqa: E402
 from wta.designer.mapping_dialog import MappingDialog  # noqa: E402
 
@@ -113,6 +116,34 @@ class DesignerSetupTests(unittest.TestCase):
         self.assertTrue(changed.manual)
         self.assertEqual([b.number for b in changed.backlogs], ["1"])
         self.assertIn("set by hand", self.window.designer_setup.summary.toPlainText())
+
+    def test_product_context_is_set_per_workbook_with_its_mapping(self):
+        with mock.patch.object(QMessageBox, "question", return_value=NO):
+            self.window.upload_workbook(self.write("Backlogs v1.xlsx"))
+        workbook_id = self.window.designer_setup.selected_id()
+        self.assertIn("Product context: not set", self.window.designer_setup.summary.toPlainText())
+
+        def describe(dialog):
+            dialog.context_edit.setPlainText("  a CRM app (contacts, deals)  ")
+            return QDialog.DialogCode.Accepted
+
+        with mock.patch.object(MappingDialog, "exec", describe):
+            self.window.edit_workbook_mapping(workbook_id)
+        self.assertEqual(wb.load_workbook(self.db, workbook_id).product_context, "a CRM app (contacts, deals)")
+        self.assertIn("Product context: a CRM app", self.window.designer_setup.summary.toPlainText())
+        backlog = wb.load_workbook(self.db, workbook_id).sheets[0].backlogs[0]
+        request = generations.request_for_backlog(self.db, backlog.id, DesignerSettings())
+        self.assertEqual(request.settings.product_context, "a CRM app (contacts, deals)")
+        self.assertIn("a CRM app (contacts, deals)", pb.system_prompt(request.settings))
+        # A new version of the workbook starts with the same context.
+        with mock.patch.object(QMessageBox, "question", return_value=NO):
+            self.window.upload_workbook(self.write("Backlogs v2.xlsx", title="Sign-in"))
+        latest = wb.load_workbook(self.db, wb.list_workbooks(self.db)[0].id)
+        self.assertEqual((latest.version_label, latest.product_context), ("v2", "a CRM app (contacts, deals)"))
+        # A workbook without one uses the settings value as before.
+        wb.set_product_context(self.db, workbook_id, "  ")
+        request = generations.request_for_backlog(self.db, backlog.id, DesignerSettings())
+        self.assertEqual(request.settings.product_context, DesignerSettings().product_context)
 
     def test_mapping_dialog_form(self):
         with mock.patch.object(QMessageBox, "question", return_value=NO):
