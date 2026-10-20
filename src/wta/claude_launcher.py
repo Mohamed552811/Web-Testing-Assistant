@@ -199,6 +199,41 @@ def suggest_args(model: str = "") -> list[str]:
     ]
 
 
+# Test Case Designer: ask for the model's maximum output; Claude Code lowers it to each model's cap.
+DESIGNER_MAX_OUTPUT_TOKENS = 128000
+
+
+def designer_args(model: str, system_prompt_file: Path, json_schema: str) -> list[str]:
+    """Arguments for one Test Case Designer generation: the backlog and its screenshots go in on stdin as one
+    stream-json user message; the answer comes back as `structured_output` checked against `json_schema`.
+    No tools, no MCP servers, none of the user's settings, and the session is not saved."""
+    return ["--model", model] + [
+        "-p",
+        "--input-format", "stream-json",
+        "--output-format", "stream-json",
+        "--verbose",
+        "--restricted",
+        "--strict-mcp-config",
+        "--tools=",
+        "--permission-mode", "dontAsk",
+        "--no-session-persistence",
+        "--system-prompt-file", str(system_prompt_file),
+        "--json-schema", json_schema,
+    ]
+
+
+def designer_environment(base: dict[str, str] | None = None) -> dict[str, str]:
+    env = child_environment(base)
+    env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = str(DESIGNER_MAX_OUTPUT_TOKENS)
+    return env
+
+
+def stream_json_user_message(content: list[dict]) -> str:
+    """One line for `--input-format stream-json` (the Agent SDK's user message shape)."""
+    return json.dumps({"type": "user", "message": {"role": "user", "content": content},
+                       "parent_tool_use_id": None}) + "\n"
+
+
 def playwright_mcp_config(cdp_port: int, output_dir: Path) -> dict:
     """MCP config that attaches Playwright MCP to the embedded browser's CDP endpoint."""
     return {

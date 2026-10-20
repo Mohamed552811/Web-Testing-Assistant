@@ -130,6 +130,69 @@ class Image(Base):
     __table_args__ = (UniqueConstraint("workbook_id", "label", name="uq_image_label"),)
 
 
+class GenerationRun(Base):
+    """One generation for one backlog (spec 8.2 generation_run), with what produced it."""
+
+    __tablename__ = "designer_generation_run"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    backlog_item_id: Mapped[int] = mapped_column(ForeignKey("designer_backlog.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    model_id: Mapped[str] = mapped_column(String(100), default="")  # as Claude Code reported it
+    model_resolution: Mapped[str] = mapped_column(String(200), default="")
+    max_output_tokens: Mapped[int | None] = mapped_column(Integer)  # requested; Claude Code caps it per model
+    prompt_version: Mapped[str] = mapped_column(String(20))
+    settings_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    user_guidance: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(30))  # ok | invalid | error | insufficient_information
+    message: Mapped[str] = mapped_column(Text, default="")
+    stop_reason: Mapped[str] = mapped_column(String(50), default="")
+    raw_response: Mapped[dict | None] = mapped_column(JSON)
+    schema_valid: Mapped[bool] = mapped_column(Boolean, default=False)
+    validation_errors: Mapped[list[str]] = mapped_column(JSON, default=list)
+    attempts: Mapped[list[dict]] = mapped_column(JSON, default=list)  # one entry per claude -p call
+
+    test_cases: Mapped[list["DesignerTestCase"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan", order_by="DesignerTestCase.seq"
+    )
+    open_questions: Mapped[list["OpenQuestion"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan", order_by="OpenQuestion.id"
+    )
+
+
+class DesignerTestCase(Base):
+    """A test case of a generation run (spec 8.2 test_case; editing arrives in M4)."""
+
+    __tablename__ = "designer_test_case"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("designer_generation_run.id", ondelete="CASCADE"))
+    backlog_item_id: Mapped[int] = mapped_column(ForeignKey("designer_backlog.id", ondelete="CASCADE"))
+    case_id: Mapped[str] = mapped_column(String(50))  # TC-003-02
+    seq: Mapped[int] = mapped_column(Integer)
+    data: Mapped[dict] = mapped_column(JSON)  # the test case as returned, in the run's preset shape
+    locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    edited: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    run: Mapped[GenerationRun] = relationship(back_populates="test_cases")
+
+
+class OpenQuestion(Base):
+    __tablename__ = "designer_open_question"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    backlog_item_id: Mapped[int] = mapped_column(ForeignKey("designer_backlog.id", ondelete="CASCADE"))
+    run_id: Mapped[int] = mapped_column(ForeignKey("designer_generation_run.id", ondelete="CASCADE"))
+    text: Mapped[str] = mapped_column(Text)
+    answered: Mapped[bool] = mapped_column(Boolean, default=False)
+    answer_note: Mapped[str | None] = mapped_column(Text)
+
+    run: Mapped[GenerationRun] = relationship(back_populates="open_questions")
+
+
 class DesignerSetting(Base):
     """Workspace-level settings (spec 8.2 `settings`); the feature settings live under name "feature"."""
 

@@ -4,16 +4,16 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
 
 ## Status
 
-- Done: Step 0 (exploration, plan, decisions below); M0; M1; M2.
-- In progress: M3.
-- Next: M3 generation through `claude -p`, validation, retry and continuation, golden fixtures.
+- Done: Step 0 (exploration, plan, decisions below); M0; M1; M2; M3.
+- In progress: nothing. Waiting for the go-ahead on M4.
+- Next: M4 designer UI (backlog picker and search, notes, picture management, results table, editing, open questions).
 
 | Milestone | Status |
 |---|---|
 | M0 Launchpad, setup step, mode switcher | done (2026-10-19) |
 | M1 Upload-time workbook analysis | done (2026-10-19) |
 | M2 Settings, presets, prompt builder | done (2026-10-20) |
-| M3 Generation, validation, retry, golden fixtures | not started |
+| M3 Generation, validation, retry, golden fixtures | done (2026-10-20) |
 | M4 Designer UI | not started |
 | M5 Regenerate, history, tags, exports | not started |
 | M6 Send to Smoke / Regression, Copy as prompt | not started |
@@ -130,6 +130,33 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
    - The prompt files and the default product context stay in git, because the app needs them.
    - The reference test's expected backlog map now lives in the git-ignored `tests/fixtures/designer/backlog_map.json`. Tests use neutral sample data.
    - The M1 commit (af6f1e1) still holds the old test titles in its history; it has not been pushed.
+
+## M3 notes
+
+- Verified before building, from `claude --help` (v2.1.303), the CLI reference, the headless docs, the structured-outputs docs and one small live probe:
+  - `--system-prompt-file` exists.
+  - `--json-schema` takes the schema as a string. The answer arrives as `result.structured_output`, through a `StructuredOutput` tool, so `stop_reason` is `tool_use`. The CLI retries schema mismatches itself; when it gives up, the result subtype is `error_max_structured_output_retries`. The CLI validates with draft-07, and schema (b) declares no draft.
+  - A stdin message for `--input-format stream-json` has the shape `{"type":"user","message":{"role":"user","content":[…]},"parent_tool_use_id":null}`, and image blocks work in it.
+  - `CLAUDE_CODE_MAX_OUTPUT_TOKENS=128000` requests the model's maximum; Claude Code lowers it to each model's cap.
+- Files:
+  - `src/wta/designer/validation.py`: schema (a) checked with `jsonschema`, the cross-field rules of spec 5.3, enum capitalization normalized, the retry feedback text, and salvage of complete test cases from an answer that was cut off.
+  - `src/wta/designer/generation.py`:
+    - `Planner` (pure logic): the first call; one retry with the validation errors appended; up to 2 continuations that pass the salvaged cases as `locked_test_cases`; error messages; and the spec 3.5 preflight (no text, no pictures and no notes means no model call).
+    - `ClaudeCall` runs one QProcess.
+    - `GenerationRun` drives the calls and removes the temporary prompt folder afterwards.
+  - `claude_launcher.py`: `designer_args`, `designer_environment` (no `ANTHROPIC_API_KEY`) and `stream_json_user_message`.
+  - Storage in `src/wta/db/generations.py`, in the `designer_generation_run`, `designer_test_case` and `designer_open_question` tables:
+    - Every run is stored, including failures, with its model id, model resolution, `prompt_version`, settings snapshot, stop reason, raw response, schema validity, validation errors and per-call usage.
+    - Test cases and open questions are stored only for a valid answer.
+- Golden fixtures (`tests/test_designer_golden.py`; they need the git-ignored spec and workbook):
+  - Offline: the spec's three reference answers pass our validator and our coverage checks, and the request built from the uploaded workbook equals the spec's fixture inputs (cells, rows, notes, pictures).
+  - Live, with `WTA_LIVE_CLAUDE=1`, run on 2026-10-20 with Opus 5.5 and the real screenshots: all three answers were schema-valid.
+    - Backlog 1: 3 cases, 1 call.
+    - Backlog 9: 8 cases, 1 call.
+    - Backlog 3: 11 cases, 2 calls. The first answer had a title over 120 characters, and the retry fixed it.
+    - The answers are kept in `tests/fixtures/designer/live/` (git-ignored) and re-checked offline.
+- Owner decision (M3): the prompt stays verbatim spec 7.1. Spec 4.5 asks for permission coverage, but 7.1 never says so, so the model asks about permissions in `open_questions` instead of inventing test cases. The golden check accepts either.
+- Not built here: the generation UI (progress, results table) is M4. The resolved model id is stored per run but not yet shown in the settings dialog.
 
 ## Open decisions
 

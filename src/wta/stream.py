@@ -28,6 +28,9 @@ class RunSummary:
     cache_creation_tokens: int = 0
     text: str = ""
     errors: list[str] = field(default_factory=list)
+    structured_output: object = None  # with --json-schema: the validated JSON
+    stop_reason: str = ""
+    api_error_status: int | None = None
 
 
 @dataclass
@@ -116,5 +119,9 @@ def parse_line(line: str) -> ParsedLine:
             cache_creation_tokens=usage.get("cache_creation_input_tokens", 0),
             text=message.get("result", "") or "",
             errors=list(message.get("errors") or []),
+            structured_output=message.get("structured_output"),
+            stop_reason=message.get("stop_reason") or "",
+            api_error_status=message.get("api_error_status") if isinstance(message.get("api_error_status"), int)
+            else None,
         )
     return out

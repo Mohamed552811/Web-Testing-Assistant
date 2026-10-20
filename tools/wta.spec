@@ -12,6 +12,7 @@ datas = (
     collect_data_files("wta", subdir="assets")  # logo, app icon and the bundled Lucide icons
     + collect_data_files("wta", subdir="designer/prompts")  # Test Case Designer prompt templates
     + collect_data_files("docx")  # python-docx's default document template (Word export)
+    + collect_data_files("jsonschema_specifications")  # the JSON Schema metaschemas jsonschema loads
 )
 
 a = Analysis(  # noqa: F821
