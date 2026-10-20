@@ -66,24 +66,36 @@ This installs PySide6, SQLAlchemy, openpyxl and python-docx. The first test run 
 
 ## Using it
 
-1. **Session → New session**: enter the target URL, allowed domains, viewport and a test-environment account. You can add **other accounts** (roles such as "Sales manager") and choose a **folder of files Claude may upload**; each scenario or smoke page can then **run as** one of the accounts.
-2. **Scenarios tab**: add up to 5 scenarios per batch in plain language, then press **Run batch**.
+The app opens on the **Launchpad** with three modes:
+
+- **Test Case Design**: Claude turns the backlogs of an Excel workbook into test cases (see [the Test Case Designer guide](docs/test-case-designer/README.md)).
+- **Regression Testing**: Claude Code runs your scenarios in the embedded browser and you review every step.
+- **Smoke Testing**: Claude Code checks pages quickly before a release.
+
+Switch modes with the mode button or **Mode** in the menu bar (Alt+M); **Back to Launchpad** is Ctrl+L. Each testing mode shows only its own tab: **Scenarios** in Regression, **Smoke test** in Smoke. Both have **Live run**, **Runs** and **Checklists** (manual checklist runs handed over from Test Case Design).
+
+The toolbar of Regression and Smoke holds the session and browser actions: **New session**, **Open session**, **Details**, **Run batch**, **Stop**, **Export**, **Settings**, **Connection** (Claude's browser connection) and **Close browsers**. App settings are also in **Tools**, and **Quit** is in **Mode** (Ctrl+Q).
+
+1. **New session** (toolbar): enter the target URL, allowed domains, viewport and a test-environment account. You can add **other accounts** (roles such as "Sales manager") and choose a **folder of files Claude may upload**; each scenario or smoke page can then **run as** one of the accounts.
+2. **Scenarios tab** (Regression): add up to 5 scenarios per batch in plain language, then press **Run batch**.
    - **Suggest…**: Claude proposes scenarios from a pasted user story or from the page open in the browser; tick, edit and add them.
    - **Save to library** / **Add from library…**: keep scenarios and smoke pages to run again, for example on each new build. The library can **import test cases** from Excel or CSV, including Azure DevOps test case exports.
    - Steps, expected result and test data may use variables filled in fresh for each run: `{{random_email}}`, `{{random_name}}`, `{{random_number}}`, `{{random_text}}`, `{{uuid}}`, `{{today}}`, `{{tomorrow}}`, `{{yesterday}}`, `{{now}}`, `{{timestamp}}`.
-   **Smoke test tab**: describe one page (URL, how to reach it, login needed, what's on it) and Claude writes and runs a checklist.
-3. **Live run tab**: a timeline of each action, what Claude saw (one line; click to expand) and its notes, with "Step 4 of 5" progress and a timer. **Stop** ends the run at once. A banner over the browser reminds you not to click in the page while Claude works, and Windows shows a notification when a run finishes or Claude asks for confirmation.
+   **Smoke test tab** (Smoke): describe one page (URL, how to reach it, login needed, what's on it) and Claude writes and runs a checklist.
+3. **Live run tab**: a timeline of each action, what Claude saw (one line; click to expand) and its notes, with "Step 4 of 5" progress and a timer. **Stop** ends the run at once. A banner over the browser reminds you not to click in the page while Claude works. Windows shows a notification, under the app's own name and logo, when a run or a test case generation finishes or Claude asks for confirmation; notifications stay in the Windows notification center.
 4. Review every step: **Approve**, **Override** the status, add a comment, or **Request re-run**. A step is final only after your review.
 5. **Runs tab**: reopen past runs and their traces, and write **site notes**. Notes are added to the next run's prompt for that site. Every run keeps its own steps. **Compare with previous run** shows what changed since the previous run of the same test (also in an earlier session, for scenarios added from the library): regressions, fixes, other changes. **Errors and speed** lists what the app itself saw on the page during the run: console errors, uncaught JavaScript errors, failed requests, page load times (slow from 3 s) and, for smoke tests, low text contrast. It covers every step, including ones that passed.
-6. **Session → Export report** (Ctrl+E): Excel, PDF, Word or Markdown.
+6. **Export** on the toolbar (Ctrl+E): Excel, PDF, Word or Markdown.
    - Excel's Bugs sheet uses Azure DevOps / TFS field names, so it can be imported.
    - Markdown writes a folder with `SUMMARY.md` (test information, scope, results per test case, overall result, bugs found, attachments), one `BUG-NNN-<title>.md` per bug, and the screenshots. Key Findings, Recommendations, Impact and Notes are left empty for you to fill in.
    - Application and Test scope come from the session form; Tester comes from Settings.
 7. **Tools menu**: **Search everything** (Ctrl+Shift+F) across all sessions — scenarios, steps, bugs, site notes and the library; double-click a result to open it. **Trends** shows the pass rate by day and the open bugs per session for a site. **Clean up and back up** shows how much disk the runs folder uses, removes run folders older than N days (each scenario's latest run is kept), and backs up or restores the database. Backups stay in the data folder on this machine, because they include the test accounts; a restore takes effect at the next start.
-8. **Session → Settings** (Ctrl+,): tester name, screenshot timing, default export format, "pause before risky actions" (off by default), the plan usage limit at which a batch pauses (80% of the 5-hour window by default), and the model for scenarios (Claude Code's default) and for smoke tests (Sonnet).
+8. **Settings** on the toolbar or in **Tools** (Ctrl+,): tester name, screenshot timing, default export format, "pause before risky actions" (off by default), the plan usage limit at which a batch pauses (80% of the 5-hour window by default), and the model for scenarios (Claude Code's default) and for smoke tests (Sonnet).
    Next to **Run batch** the app shows an estimate of the plan usage, from your recent runs. Before each scenario after the first, a batch pauses and asks you once usage reaches the limit.
 
-The bar at the top shows Claude Code sign-in and your 5-hour and weekly plan usage. Usage is updated during test runs from data Claude Code reports.
+The strip at the top shows Claude Code sign-in and your 5-hour and weekly plan usage, each with its reset time (on hover when the window is narrow). Usage is updated during runs from data Claude Code reports. The **refresh** button (↻) asks for it now: it runs one tiny Claude Code call (Haiku, no tools), which uses a very small part of your plan. After a window resets, its old reading shows as "– needs refresh".
+
+The light theme is cream white with a teal accent; the dark theme uses brick red (**Settings → Theme**, or follow Windows).
 
 ## Safety
 
@@ -131,6 +143,8 @@ Example, starting from `main` 1.0.0 and `pre-release` 1.1.1:
 3. Merging `pre-release` into `main` makes both 2.2.1.
 
 `redesign-app-features` was created before these rules. It carries `pre-release`'s version until it is merged, and the merge makes `pre-release` 1.2.1.
+
+Releases on GitHub follow the same numbers: a build of a branch or of `pre-release` is published as a **pre-release** tagged `v<A.B.C>` (for example `v1.1.3`), and only builds of `main` are full releases.
 
 ## Development
 
