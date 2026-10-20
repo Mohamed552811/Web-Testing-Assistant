@@ -11,6 +11,17 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QPushButton, QT
 from wta import claude_launcher, icons, usage
 
 GREEN, YELLOW, RED, GREY = "#2ea043", "#d29922", "#da3633", "#6e7681"
+# Narrower than these, the strip drops details (shown on hover instead), so it never stops the window
+# from getting narrow.
+HIDE_RESETS_BELOW = 1150
+HIDE_UPDATED_BELOW = 820
+
+
+def _shrinkable(label: QLabel) -> QLabel:
+    """A label that never sets the window's minimum width (it is hidden or clipped when narrow): it keeps its
+    text's width while there is room, and an explicit minimum of 1 lets the layout shrink it."""
+    label.setMinimumWidth(1)
+    return label
 
 
 def level_color(percent: float) -> str:
@@ -34,8 +45,9 @@ class _WindowBar(QWidget):
         self.bar.setFixedSize(90, 6)
         self.value = QLabel()
         self.value.setMinimumWidth(34)
-        self.reset = QLabel()
+        self.reset = _shrinkable(QLabel())
         self.reset.setProperty("muted", True)
+        self.compact = False
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
@@ -70,11 +82,18 @@ class _WindowBar(QWidget):
         self.value.style().unpolish(self.value)
         self.value.style().polish(self.value)
         self.reset.setText(reset)
-        self.reset.setVisible(bool(reset))
+        self._fit_reset()
         self.bar.setStyleSheet(
             "QProgressBar { border: none; border-radius: 3px; background: rgba(128, 128, 128, 0.25); }"
             f"QProgressBar::chunk {{ border-radius: 3px; background: {color}; }}"
         )
+
+    def set_compact(self, compact: bool) -> None:
+        self.compact = compact
+        self._fit_reset()
+
+    def _fit_reset(self) -> None:
+        self.reset.setVisible(bool(self.reset.text()) and not self.compact)
 
     def _hover(self, text: str) -> None:
         text += "\nPlan usage as reported by Claude Code itself (rate_limit_event)."
@@ -117,13 +136,14 @@ class TopBar(QWidget):
 
         self.dot = QLabel("●")
         self.dot.setStyleSheet(f"color: {GREY}; font-size: 12pt;")
-        self.claude_label = QLabel("Checking Claude Code sign-in…")
+        self.claude_label = _shrinkable(QLabel("Checking Claude Code sign-in…"))
         self.check_button = QPushButton("Check again")
         self.check_button.hide()
         self.five_hour = _WindowBar("5-hour")
         self.seven_day = _WindowBar("Weekly")
         self.updated = QLabel()
         self.updated.setProperty("muted", True)
+        _shrinkable(self.updated)
         self.refresh_button = QToolButton()
         self.refresh_button.setAutoRaise(True)
         icons.set_icon(self.refresh_button, "rotate-cw")
@@ -170,6 +190,13 @@ class TopBar(QWidget):
         self._tick.timeout.connect(self.refresh_usage)
         self._tick.start()
         self.refresh_usage()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 (Qt name)
+        width = event.size().width()
+        for bar in (self.five_hour, self.seven_day):
+            bar.set_compact(width < HIDE_RESETS_BELOW)
+        self.updated.setVisible(width >= HIDE_UPDATED_BELOW)
+        super().resizeEvent(event)
 
     def check_sign_in(self) -> None:
         self.check_button.hide()

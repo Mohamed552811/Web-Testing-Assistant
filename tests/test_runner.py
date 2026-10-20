@@ -192,3 +192,26 @@ class ReadPlanUsageTests(unittest.TestCase):
         with mock.patch.object(claude_launcher, "find_claude", return_value=["claude"]), \
                 mock.patch.object(claude_launcher.subprocess, "run", return_value=mock.Mock(returncode=1, stdout="")):
             self.assertEqual(claude_launcher.read_plan_usage(), (None, "Claude Code did not report plan usage (exit code 1)."))
+
+
+class TopBarWidthTests(unittest.TestCase):
+    def test_details_hide_instead_of_blocking_a_narrow_window(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "usage.json"
+            usage.save(path, {"five_hour": usage.WindowUsage(40.0, 4_000_000_000, 10)})
+            bar = TopBar(path)
+            bar.close_all_button.hide()  # as in the main window (it is on the toolbar there)
+            bar.resize(1400, 30)
+            bar.show()
+            app.processEvents()
+            self.assertTrue(bar.five_hour.reset.isVisible())
+            self.assertLess(bar.minimumSizeHint().width(), 700)  # labels shrink, never set the window's minimum
+            bar.resize(700, 30)
+            app.processEvents()
+            self.assertFalse(bar.five_hour.reset.isVisible())  # the reset time is still on hover
+            self.assertFalse(bar.updated.isVisible())
+            self.assertIn("resets", bar.five_hour.bar.toolTip())
+            bar.resize(1400, 30)
+            app.processEvents()
+            self.assertTrue(bar.five_hour.reset.isVisible() and bar.updated.isVisible())
+            bar.deleteLater()
