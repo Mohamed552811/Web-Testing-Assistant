@@ -5,7 +5,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl, Signal
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -27,10 +27,13 @@ from wta import icons
 from wta.db import Database
 from wta.db import designer_content as content
 from wta.db import designer_settings, generations
+from wta.db import checklists, library
 from wta.db import workbooks as wb
 from wta.designer import export as exporter
 from wta.designer.backlog_panel import BacklogPanel
 from wta.designer.export_dialog import WORKBOOK, ExportDialog
+from wta.designer import handoff
+from wta.designer.handoff_dialog import PROMPT, SCENARIOS, SELECTED, HandOffDialog
 from wta.designer.generation import GenerationOutcome, GenerationRun
 from wta.designer.history_dialog import HistoryDialog
 from wta.designer.questions_panel import QuestionsPanel
@@ -44,6 +47,7 @@ class DesignerWorkspace(QWidget):
     change_workbook_requested = Signal()
     settings_requested = Signal()
     status_message = Signal(str)
+    checklist_created = Signal(str, int)  # mode, run id: the main window can open it
 
     def __init__(self, db: Database | None = None, work_root: Path | None = None, usage_path: Path | None = None,
                  parent=None) -> None:
@@ -131,6 +135,7 @@ class DesignerWorkspace(QWidget):
         self.export_button.clicked.connect(self.export)
         if db is not None:
             self.backlog_panel.history_requested.connect(self.show_history)
+            self.results_panel.handoff_requested.connect(self.hand_off)
             self.results_panel.changed.connect(self._update_generation_state)
             self.backlog_panel.generate_requested.connect(self.generate)
             self.backlog_panel.cancel_requested.connect(self.cancel_generation)
@@ -406,3 +411,65 @@ class DesignerWorkspace(QWidget):
         if box.clickedButton() is folder_button:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(target if target.is_dir() else target.parent)))
         return written
+
+    # --- hand-off to Smoke / Regression (spec 8.6) --------------------------------------------------
+
+    def _workbook_cases(self) -> list[tuple[int, content.CaseView]]:
+        return [(backlog_id, case) for backlog_id in self._workbook_backlog_ids()
+                for case in content.current_cases(self.db, backlog_id)]
+
+    def hand_off(self, kind: str) -> None:
+        if self.db is None or self.view is None:
+            return
+        backlog = self.backlog_panel.backlog
+        selected = self.results_panel.selected_cases()
+        everything = self._workbook_cases()
+        tag_counts: dict[str, int] = {}
+        for _backlog_id, case in everything:
+            for tag in case.data.get("tags") or []:
+                tag_counts[tag] = tag_counts.get(tag, 0) + 1
+        if not selected and not tag_counts:
+            QMessageBox.information(self, "Hand over test cases", "Select test cases first (the ✓ column).")
+            return
+        mode = kind if kind in checklists.MODES else checklists.REGRESSION
+        open_runs = [(r.id, f"{r.name} ({len(r.items)} test cases, {checklists.STATUS_LABELS[r.status]})")
+                     for r in checklists.list_runs(self.db, mode)] if kind in checklists.MODES else []
+        dialog = HandOffDialog(kind, len(selected), sorted(tag_counts), checklists.default_name(mode, self.view.file_name),
+                               open_runs, tag_counts, self)
+        if dialog.exec() != HandOffDialog.DialogCode.Accepted:
+            return
+        if dialog.scope() == SELECTED:
+            cases = [checklists.HandOffCase(c.row_id, backlog.id, c.data) for c in selected]
+        else:
+            cases = [checklists.HandOffCase(c.row_id, backlog_id, c.data) for backlog_id, c in everything
+                     if dialog.tag() in (c.data.get("tags") or [])]
+        if kind == PROMPT:
+            text = handoff.copy_as_prompt(dialog.mode(), [c.data for c in cases], designer_settings.load(self.db))
+            QGuiApplication.clipboard().setText(text)
+            self.status_message.emit(f"Copied a {dialog.mode()} checklist prompt with {len(cases)} test case(s).")
+            return
+        if kind == SCENARIOS:
+            source = f"{self.view.file_name} ({self.view.version_label})"
+            items = library.add_items(self.db, [handoff.scenario_input(c.data, source) for c in cases])
+            QMessageBox.information(self, "Add as scenarios",
+                                    f"Added {len(items)} scenario(s) to the library. In Regression Testing, use "
+                                    "\u201cAdd from library\u201d on the Scenarios tab to put them in a batch "
+                                    "for Claude Code to run.")
+            return
+        source = {"workbook": self.view.file_name, "workbook_id": self.view.id, "version": self.view.version_label,
+                  "scope": dialog.scope(), "tag": dialog.tag() if dialog.scope() != SELECTED else "",
+                  "backlogs": sorted({c.backlog_id for c in cases})}
+        if dialog.existing_run() is not None:
+            run_id = dialog.existing_run()
+            added = checklists.add_to_run(self.db, run_id, cases)
+            message = f"Added {added} test case(s) to the run (test cases already in it were skipped)."
+        else:
+            run_id = checklists.create_run(self.db, kind, dialog.run_name(), cases, source)
+            message = f"Created the {kind} run \u201c{dialog.run_name()}\u201d with {len(cases)} test case(s)."
+        self.status_message.emit(message)
+        box = QMessageBox(QMessageBox.Icon.Information, "Checklist run", message, parent=self)
+        open_button = box.addButton("Open the run", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(QMessageBox.StandardButton.Close)
+        box.exec()
+        if box.clickedButton() is open_button:
+            self.checklist_created.emit(kind, run_id)

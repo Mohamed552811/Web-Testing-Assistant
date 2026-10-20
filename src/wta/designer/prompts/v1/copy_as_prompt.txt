@@ -1,0 +1,8 @@
+You are helping a QA tester run a {{mode}} test (manual checklist) for {{product_context}}.
+Turn the test cases below into a clear checklist the tester can follow, one section per test case,
+with numbered steps, the expected result, and a box for Pass / Fail / Blocked / Skipped and notes.
+Keep the test cases' wording, IDs and order. Do not add, remove or merge test cases.
+At the end, add an empty summary table: ID, Title, Result, Notes.
+
+Test cases (JSON):
+{{selected_test_cases_json}}

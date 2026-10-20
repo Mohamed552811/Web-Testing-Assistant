@@ -38,6 +38,8 @@ from wta.designer.mapping_dialog import MappingDialog
 from wta.designer.setup_page import DesignerSetupPage, WorkbookEntry
 from wta.designer.workspace import DesignerWorkspace
 from wta.designer.summary import summary_html
+from wta.checklist_tab import ChecklistTab
+from wta.db import checklists
 from wta.welcome import AboutDialog, WelcomePage
 from wta.housekeeping_dialog import HousekeepingDialog
 from wta.search_dialog import SearchDialog
@@ -151,6 +153,11 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.run_panel, "Live run")
         self.runs_tab = RunsTab(db, self)
         self.tabs.addTab(self.runs_tab, "Runs")
+        # Manual checklist runs handed over from Test Case Design (spec 8.6), per mode.
+        self.checklist_tab = ChecklistTab(db, self.app_dir / "checklists", self)
+        self.checklist_tab.export_dir = self.app_dir / "exports"
+        self.checklist_tab.status_message.connect(lambda text: self.statusBar().showMessage(text, 10000))
+        self.tabs.addTab(self.checklist_tab, "Checklists")
         for tab in self.review_tabs:
             tab.site_note_saved.connect(self.runs_tab.notes_panel.refresh)
         self.tabs.currentChanged.connect(self._size_tabs_by_current)
@@ -194,6 +201,7 @@ class MainWindow(QMainWindow):
         self.designer_workspace.export_dir = self.app_dir / "exports"
         self.designer_workspace.tester_name = lambda: self.settings.tester_name
         self.designer_workspace.status_message.connect(lambda text: self.statusBar().showMessage(text, 15000))
+        self.designer_workspace.checklist_created.connect(self.open_checklist_run)
         self.designer_workspace.change_workbook_requested.connect(
             lambda: self.pages.setCurrentWidget(self.designer_setup))
         self.designer_workspace.settings_requested.connect(self.edit_designer_settings)
@@ -384,10 +392,18 @@ class MainWindow(QMainWindow):
         self.toolbar.setVisible(testing)
         if testing:
             self.pages.setCurrentWidget(self.splitter)
+            self.checklist_tab.set_mode(checklists.SMOKE if mode == modes.SMOKE else checklists.REGRESSION)
+            self.checklist_tab.refresh()
             self.tabs.setCurrentWidget(self.smoke_tab if mode == modes.SMOKE else self.scenario_tab)
         else:
             self._refresh_workbooks()
             self.pages.setCurrentWidget(self.designer_setup)
+
+    def open_checklist_run(self, mode: str, run_id: int) -> None:
+        """From Test Case Design: show a new checklist run in its mode's Checklists tab."""
+        self.set_mode(modes.SMOKE if mode == checklists.SMOKE else modes.REGRESSION)
+        self.checklist_tab.refresh(run_id)
+        self.tabs.setCurrentWidget(self.checklist_tab)
 
     def continue_last_mode(self) -> None:
         """Launchpad "Continue where you left off": the last mode, and its last session for Smoke/Regression."""
@@ -409,6 +425,11 @@ class MainWindow(QMainWindow):
             card.set_badge("Ready", "ok")
         else:
             card.set_badge("Setup required", "warn")
+        # Smoke and Regression: open manual checklist runs (spec: "the number of open runs", when easy to get).
+        for mode, kind in ((modes.SMOKE, checklists.SMOKE), (modes.REGRESSION, checklists.REGRESSION)):
+            count = checklists.open_count(self.db, kind)
+            self.launchpad.cards[mode].set_badge(f"{count} open checklist run{'s' if count != 1 else ''}"
+                                                 if count else "", "info")
         card.setToolTip("" if self.top_bar.signed_in
                         else "Claude Code must be installed and signed in (Help, Check setup).")
 

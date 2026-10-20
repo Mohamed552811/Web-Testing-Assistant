@@ -310,7 +310,8 @@ class WorkspaceTests(Fixture):
         self.assertEqual(first.data["steps"], ["Open \"Orders\".", "Assert that the file is saved."])
         self.assertEqual(model.data(model.index(0, steps)), "1. Open \"Orders\".\n2. Assert that the file is saved.")
         self.assertTrue(model.cases[1].locked)
-        self.assertIn("✎", model.data(model.index(0, 0)))
+        id_column = next(i for i, c in enumerate(model.columns) if c[0] == "id")
+        self.assertIn("✎", model.data(model.index(0, id_column)))
 
         results = w.results_panel
         results.table.selectRow(1)

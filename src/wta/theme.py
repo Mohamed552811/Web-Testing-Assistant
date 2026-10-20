@@ -85,6 +85,8 @@ def stylesheet(p: Palette) -> str:
                   border: 1px solid {p.accent}; font-weight: 600; }}
     QPushButton:default:hover, QPushButton[primary="true"]:hover {{ background: {p.accent_hover}; }}
     QPushButton[primary="true"]:disabled {{ background: {p.border}; border-color: {p.border}; color: {p.muted}; }}
+    QPushButton:checked {{ background: {p.selection}; color: {p.selection_text}; border: 2px solid {p.accent};
+                  font-weight: 600; }}
     QLineEdit, QPlainTextEdit, QTextEdit, QTextBrowser, QSpinBox, QComboBox {{ background: {p.base}; color: {p.text};
                   border: 1px solid {p.border}; border-radius: 6px; padding: 4px 6px;
                   selection-background-color: {p.accent}; selection-color: {p.accent_text}; }}

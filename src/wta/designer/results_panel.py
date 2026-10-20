@@ -29,7 +29,7 @@ from wta.designer.validation import case_warnings
 
 STEP_SEPARATOR = " => "
 # (field, header); optional fields are left out when the preset turns them off.
-COLUMNS = (("id", "ID"), ("title", "Title"), ("type", "Type"), ("priority", "Priority"), ("tags", "Tags"),
+COLUMNS = (("_select", "✓"), ("id", "ID"), ("title", "Title"), ("type", "Type"), ("priority", "Priority"), ("tags", "Tags"),
            ("preconditions", "Preconditions"), ("steps", "Steps"), ("expected_result", "Expected result"),
            ("basis", "Basis"), ("source_reference", "Source"), ("_locked", "Locked"), ("_warnings", "Warnings"))
 MULTILINE = {"title", "preconditions", "steps", "expected_result", "source_reference"}
@@ -57,6 +57,7 @@ def text_to_steps(text: str, per_step: bool) -> list:
 
 class CasesModel(QAbstractTableModel):
     edited = Signal()
+    selection_changed = Signal()
 
     def __init__(self, db: Database, parent=None) -> None:
         super().__init__(parent)
@@ -66,6 +67,7 @@ class CasesModel(QAbstractTableModel):
         self.settings = DesignerSettings()
         self.backlog_key = ""
         self.columns = list(COLUMNS)
+        self.selected: set[int] = set()  # row ids chosen for a hand-off (spec 8.6); not stored
 
     def load(self, cases: list[content.CaseView], settings: DesignerSettings, backlog_key: str) -> None:
         self.beginResetModel()
@@ -73,6 +75,7 @@ class CasesModel(QAbstractTableModel):
         preset = settings.preset()
         self.columns = [c for c in COLUMNS if c[0].startswith("_") or preset.includes(c[0])]
         self.warnings = case_warnings([c.data for c in cases], settings, backlog_key) if backlog_key else []
+        self.selected &= {c.row_id for c in cases}
         self.endResetModel()
 
     def field(self, column: int) -> str:
@@ -92,7 +95,7 @@ class CasesModel(QAbstractTableModel):
     def flags(self, index):
         base = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
         name = self.field(index.column())
-        if name == "_locked":
+        if name in ("_locked", "_select"):
             return base | Qt.ItemFlag.ItemIsUserCheckable
         if name == "_warnings":
             return base
@@ -113,6 +116,12 @@ class CasesModel(QAbstractTableModel):
             return None
         case, name = self.cases[index.row()], self.field(index.column())
         warnings = self.warnings[index.row()] if index.row() < len(self.warnings) else []
+        if name == "_select":
+            if role == Qt.ItemDataRole.CheckStateRole:
+                return Qt.CheckState.Checked if case.row_id in self.selected else Qt.CheckState.Unchecked
+            if role == Qt.ItemDataRole.ToolTipRole:
+                return "Select for Create Smoke run, Create Regression run, Add as scenarios or Copy as prompt"
+            return None
         if name == "_locked":
             if role == Qt.ItemDataRole.CheckStateRole:
                 return Qt.CheckState.Checked if case.locked else Qt.CheckState.Unchecked
@@ -138,6 +147,14 @@ class CasesModel(QAbstractTableModel):
         if not index.isValid():
             return False
         case, name = self.cases[index.row()], self.field(index.column())
+        if name == "_select" and role == Qt.ItemDataRole.CheckStateRole:
+            if Qt.CheckState(value) == Qt.CheckState.Checked:
+                self.selected.add(case.row_id)
+            else:
+                self.selected.discard(case.row_id)
+            self.dataChanged.emit(index, index, [role])
+            self.selection_changed.emit()
+            return True
         if name == "_locked" and role == Qt.ItemDataRole.CheckStateRole:
             case.locked = Qt.CheckState(value) == Qt.CheckState.Checked
             content.set_locked(self.db, case.row_id, case.locked)
@@ -215,6 +232,7 @@ class CaseDelegate(QStyledItemDelegate):
 
 class ResultsPanel(QWidget):
     changed = Signal()
+    handoff_requested = Signal(str)  # smoke | regression | scenarios | prompt
 
     def __init__(self, db: Database, parent=None) -> None:
         super().__init__(parent)
@@ -266,11 +284,31 @@ class ResultsPanel(QWidget):
         hint.setProperty("muted", True)
         tools.addWidget(hint)
 
+        self.select_shown_button = QPushButton("Select shown")
+        self.select_shown_button.setToolTip("Select every test case shown (use Show to pick a tag first)")
+        self.clear_selection_button = QPushButton("Clear selection")
+        self.selection_label = QLabel()
+        self.selection_label.setProperty("muted", True)
+        self.smoke_button = QPushButton("Create Smoke run…")
+        self.regression_button = QPushButton("Create Regression run…")
+        self.scenarios_button = QPushButton("Add as scenarios…")
+        self.prompt_button = QPushButton("Copy as prompt…")
+        for button, icon in ((self.smoke_button, "circle-check"), (self.regression_button, "rotate-ccw"),
+                             (self.scenarios_button, "bot"), (self.prompt_button, "copy")):
+            icons.set_icon(button, icon)
+        handoff = QHBoxLayout()
+        for widget in (self.select_shown_button, self.clear_selection_button, self.selection_label):
+            handoff.addWidget(widget)
+        handoff.addStretch(1)
+        for button in (self.smoke_button, self.regression_button, self.scenarios_button, self.prompt_button):
+            handoff.addWidget(button)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.summary)
         layout.addLayout(tools)
         layout.addWidget(self.table, 1)
+        layout.addLayout(handoff)
 
         self.model.edited.connect(self.reload)
         self.add_button.clicked.connect(self.add_case)
@@ -280,6 +318,12 @@ class ResultsPanel(QWidget):
         self.down_button.clicked.connect(lambda: self._move(1))
         self.renumber_button.clicked.connect(self.renumber)
         self.tag_filter.currentIndexChanged.connect(lambda _i: self._apply_filter())
+        self.model.selection_changed.connect(self._update_buttons)
+        self.select_shown_button.clicked.connect(self.select_shown)
+        self.clear_selection_button.clicked.connect(self.clear_selection)
+        for button, kind in ((self.smoke_button, "smoke"), (self.regression_button, "regression"),
+                             (self.scenarios_button, "scenarios"), (self.prompt_button, "prompt")):
+            button.clicked.connect(lambda _checked=False, k=kind: self.handoff_requested.emit(k))
         self.table.selectionModel().selectionChanged.connect(lambda *_: self._update_buttons())
         self._update_buttons()
 
@@ -342,7 +386,27 @@ class ResultsPanel(QWidget):
         rows = self.table.selectionModel().selectedRows() if self.table.selectionModel() else []
         return self.model.cases[rows[0].row()].row_id if rows and rows[0].row() < len(self.model.cases) else None
 
+    def select_shown(self) -> None:
+        self.model.selected |= {c.row_id for c in self.visible_cases()}
+        self._refresh_selection()
+
+    def clear_selection(self) -> None:
+        self.model.selected.clear()
+        self._refresh_selection()
+
+    def _refresh_selection(self) -> None:
+        if self.model.cases:
+            self.model.dataChanged.emit(self.model.index(0, 0), self.model.index(len(self.model.cases) - 1, 0))
+        self._update_buttons()
+
+    def selected_cases(self) -> list:
+        return [c for c in self.model.cases if c.row_id in self.model.selected]
+
     def _update_buttons(self) -> None:
+        count = len(self.model.selected)
+        self.selection_label.setText(f"{count} selected" if count else "")
+        self.clear_selection_button.setEnabled(bool(count))
+        self.select_shown_button.setEnabled(bool(self.model.cases))
         has_cases = bool(self.model.cases)
         selected = self.selected_row_id() is not None
         self.add_button.setEnabled(has_cases)

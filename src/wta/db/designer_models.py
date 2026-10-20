@@ -220,6 +220,41 @@ class ExportLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class ChecklistRun(Base):
+    """A manual Smoke or Regression checklist run made from designer test cases (spec 8.6)."""
+
+    __tablename__ = "checklist_run"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    mode: Mapped[str] = mapped_column(String(20))  # smoke | regression
+    name: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    source: Mapped[dict] = mapped_column(JSON, default=dict)  # workbook, backlogs, tag filter, product context
+    status: Mapped[str] = mapped_column(String(20), default="draft")  # draft | in_progress | completed
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    items: Mapped[list["ChecklistItem"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan", order_by="ChecklistItem.position"
+    )
+
+
+class ChecklistItem(Base):
+    __tablename__ = "checklist_item"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("checklist_run.id", ondelete="CASCADE"))
+    test_case_ref: Mapped[str] = mapped_column(String(100))  # designer test case row id, for "refresh from designer"
+    backlog_item_id: Mapped[int | None] = mapped_column(ForeignKey("designer_backlog.id", ondelete="SET NULL"))
+    position: Mapped[int] = mapped_column(Integer)
+    snapshot: Mapped[dict] = mapped_column(JSON)  # the test case when it was handed over; later edits do not change it
+    result: Mapped[str | None] = mapped_column(String(20))  # pass | fail | blocked | skipped
+    notes: Mapped[str | None] = mapped_column(Text)
+    attachment_url: Mapped[str | None] = mapped_column(Text)  # a screenshot file, relative to the attachments folder
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    run: Mapped[ChecklistRun] = relationship(back_populates="items")
+
+
 class DesignerSetting(Base):
     """Workspace-level settings (spec 8.2 `settings`); the feature settings live under name "feature"."""
 

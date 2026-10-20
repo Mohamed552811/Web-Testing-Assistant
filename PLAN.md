@@ -25,6 +25,10 @@ Tick a phase only after it has been reviewed and accepted.
 - [x] 18. Housekeeping and insight: highlight the failing element in bug screenshots; search across everything; clean up old runs and back up; trends dashboard.
 - [x] 19. Windows installer: PyInstaller bundle and Inno Setup Setup.exe with logo, shortcuts and uninstaller (data in %APPDATA% kept); first-start checks for Node.js and Claude Code; one-command build script.
 
+### Test Case Designer (approved 2026-10-19; spec and brief in docs/test-case-designer, kept local)
+
+- [ ] 20. Launchpad with three modes, and the Test Case Designer: upload-time workbook analysis, settings and output presets, generation through `claude -p` with validation, the designer workspace, regenerate, history and exports, and hand-off to manual Smoke / Regression checklist runs. Milestones M0-M6, progress and decisions in docs/test-case-designer/PROGRESS.md; user guide in docs/test-case-designer/README.md.
+
 Parked: send bugs straight to Azure DevOps; a single Claude Code project for app runs.
 
 ## Findings to carry forward

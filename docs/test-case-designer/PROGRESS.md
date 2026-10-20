@@ -4,9 +4,9 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
 
 ## Status
 
-- Done: Step 0 (exploration, plan, decisions below); M0 to M5.
-- In progress: nothing. Waiting for the go-ahead on M6.
-- Next: M6 Send to Smoke / Regression (checklist runs and "Add as scenarios") and "Copy as prompt"; then the user guide README.md.
+- Done: Step 0 (exploration, plan, decisions below); M0 to M6; user guide (`README.md`).
+- In progress: nothing. All milestones are built; waiting for the owner's review.
+- Next: the owner's review. PLAN.md phase 20 is ticked after acceptance.
 
 | Milestone | Status |
 |---|---|
@@ -16,7 +16,7 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
 | M3 Generation, validation, retry, golden fixtures | done (2026-10-20) |
 | M4 Designer UI | done (2026-10-20) |
 | M5 Regenerate, history, tags, exports | done (2026-10-20) |
-| M6 Send to Smoke / Regression, Copy as prompt | not started |
+| M6 Send to Smoke / Regression, Copy as prompt | done (2026-10-20) |
 
 ## Decisions (2026-10-19)
 
@@ -180,7 +180,6 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
 - Hidden pages of the main window are now ignored for sizing, so the wide workspace does not stop the window, or the Launchpad cards, from getting narrow.
 - New icons `arrow-up.svg` and `arrow-down.svg` (Lucide, ISC) for Up and Down.
 - Not built here (M5): regenerating with guidance and locked cases, restoring history, tag filtering, and exports.
-- Still to write before the end: `docs/test-case-designer/README.md` (the user guide is part of the definition of done).
 
 ## M5 notes
 
@@ -204,6 +203,33 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
   - Excel: "Test Cases" (frozen header, wrapped text) and "Open Questions" (sheet, backlog_number, question).
   - Every export is logged in `designer_export_log`. "User" is the tester name from Settings, because the app has no accounts.
 - Tests: `tests/test_designer_history_export.py`.
+
+## M6 notes
+
+- **Checklist runs** (`src/wta/db/checklists.py`, tables `checklist_run` and `checklist_item` from spec 8.2):
+  - Each item stores a snapshot of its test case, its result (Pass / Fail / Blocked / Skipped), notes, a screenshot and when it was run.
+  - A run's status is draft, then in progress (after the first result or note), then completed (Complete run; Reopen run undoes it).
+  - "Refresh from designer" works on draft runs only.
+  - Adding cases to an open run skips cases that are already in it.
+  - A run exports to Excel (sheets "Checklist" and "Summary") or CSV.
+  - Screenshots are copied to `<app data>/checklists/run-<id>/`.
+- **Checklists tab** (`src/wta/checklist_tab.py`): it sits in the Smoke and Regression windows next to Scenarios, Smoke test, Live run and Runs, and shows the runs of the current mode. Checked buttons now have a theme style.
+- **Launchpad badges**: Smoke and Regression show "n open checklist runs" (spec Part 1).
+- **Hand-off from the designer** (`designer/handoff.py`, `handoff_dialog.py`):
+  - A ✓ column selects test cases (not stored), plus "Select shown" (which respects the tag filter) and "Clear selection".
+  - Create Smoke run, Create Regression run, Add as scenarios and Copy as prompt work on the selection, or on every test case of the workbook with a tag.
+  - "Add as scenarios" (decision 2) writes library scenarios. The name is `<ID> <title>`, the preconditions become the first step ("Make sure that: …"), and the expected result is kept; the source is "Test Case Designer: <workbook>".
+  - After creating a run, "Open the run" switches to that mode's Checklists tab.
+- **Copy as prompt**: the template is `prompts/v1/copy_as_prompt.txt`, word for word from spec 8.6 (checked when the local spec is present). The cases are copied in the preset's shape.
+- Tests: `tests/test_designer_handoff.py`.
+
+## Definition of done (brief)
+
+- The Launchpad opens first, with three cards, status badges, the setup step and a working mode switcher. Done (M0, with open-run badges from M6).
+- Uploading `Print_designer_6.xlsx` produces the spec 3.3 backlog map. Done (M1): 10 backlogs on "Print d.", backlog 5 on "Sheet1", 15 attachments, and IMG-13 reusing IMG-04's file.
+- `backlog 9` generates schema-valid test cases with real screenshots. Done (M3 live run).
+- Test cases can be edited, regenerated, exported and sent to a Smoke or Regression checklist run. Done (M4 to M6).
+- All tests pass, and `PROGRESS.md` and `README.md` are up to date.
 
 ## Open decisions
 
