@@ -4,9 +4,11 @@ sent, generate, then edit the test cases and answer the open questions (spec 3.4
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QComboBox,
+    QFileDialog,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -26,8 +28,11 @@ from wta.db import Database
 from wta.db import designer_content as content
 from wta.db import designer_settings, generations
 from wta.db import workbooks as wb
+from wta.designer import export as exporter
 from wta.designer.backlog_panel import BacklogPanel
+from wta.designer.export_dialog import WORKBOOK, ExportDialog
 from wta.designer.generation import GenerationOutcome, GenerationRun
+from wta.designer.history_dialog import HistoryDialog
 from wta.designer.questions_panel import QuestionsPanel
 from wta.designer.results_panel import ResultsPanel
 from wta.designer.search import find
@@ -49,7 +54,10 @@ class DesignerWorkspace(QWidget):
         self.view: wb.WorkbookView | None = None
         self.run: GenerationRun | None = None
         self.run_backlog_id: int | None = None
-        # Set by the main window: why generation cannot start now ("" = it can), and remembered UI values.
+        # Set by the main window: why generation cannot start now ("" = it can), remembered UI values, the
+        # export folder and the tester name for the export log.
+        self.export_dir: Path | None = None
+        self.tester_name: Callable[[], str] = lambda: ""
         self.generation_blocker: Callable[[], str] = lambda: ""
         self.remember: Callable[[str, object], None] = lambda _key, _value: None
         self.recall: Callable[[str], object] = lambda _key: None
@@ -60,8 +68,11 @@ class DesignerWorkspace(QWidget):
         icons.set_icon(self.settings_button, "settings")
         self.change_button = QPushButton("Change workbook")
         icons.set_icon(self.change_button, "folder-open")
+        self.export_button = QPushButton("Export…")
+        icons.set_icon(self.export_button, "download")
         header = QHBoxLayout()
         header.addWidget(self.title, 1)
+        header.addWidget(self.export_button)
         header.addWidget(self.settings_button)
         header.addWidget(self.change_button)
 
@@ -117,7 +128,10 @@ class DesignerWorkspace(QWidget):
         self.search.returnPressed.connect(self.find_backlog)
         self.search_button.clicked.connect(self.find_backlog)
         self.backlogs.currentItemChanged.connect(lambda current, _prev: self._backlog_chosen(current))
+        self.export_button.clicked.connect(self.export)
         if db is not None:
+            self.backlog_panel.history_requested.connect(self.show_history)
+            self.results_panel.changed.connect(self._update_generation_state)
             self.backlog_panel.generate_requested.connect(self.generate)
             self.backlog_panel.cancel_requested.connect(self.cancel_generation)
             self.backlog_panel.changed.connect(self._refresh_counts)
@@ -235,10 +249,21 @@ class DesignerWorkspace(QWidget):
         backlog = self.backlog_panel.backlog
         self.results_panel.show_backlog(backlog_id, backlog.number if backlog else "", designer_settings.load(self.db))
         self.questions_panel.show_backlog(backlog_id)
+        self._update_generation_state()
         if self.run is not None:
             self.backlog_panel.set_running(True, "Generating for another backlog…"
                                            if backlog_id != self.run_backlog_id else self.backlog_panel.progress.text())
         self._refresh_counts()
+
+    def _update_generation_state(self) -> None:
+        backlog = self.backlog_panel.backlog
+        if backlog is None:
+            self.backlog_panel.set_generation_state(False, 0, 0)
+            return
+        runs = generations.list_runs(self.db, backlog.id)
+        locked = sum(1 for c in self.results_panel.model.cases if c.locked)
+        self.backlog_panel.set_generation_state(content.current_run_id(self.db, backlog.id) is not None, len(runs),
+                                                locked)
 
     def _refresh_counts(self) -> None:
         if self.db is None:
@@ -259,9 +284,12 @@ class DesignerWorkspace(QWidget):
             QMessageBox.warning(self, "Generate test cases", blocker)
             return
         settings = designer_settings.load(self.db)
+        panel = self.backlog_panel
+        locked = ([c.data for c in content.current_cases(self.db, backlog.id) if c.locked]
+                  if panel.keep_locked.isVisible() and panel.keep_locked.isChecked() else [])
         request = generations.request_for_backlog(
             self.db, backlog.id, settings, content.texts(self.db, backlog.id, content.DOMAIN_NOTE),
-            content.texts(self.db, backlog.id, content.SUPPLEMENTARY))
+            content.texts(self.db, backlog.id, content.SUPPLEMENTARY), panel.guidance.text().strip(), locked)
         self.run_backlog_id = backlog.id
         self.run = GenerationRun(request, self.work_root or Path("."), self.usage_path, parent=self)
         self.run.progress.connect(lambda text: self._progress(text))
@@ -288,6 +316,8 @@ class DesignerWorkspace(QWidget):
         if backlog_id == self.current_backlog_id():
             self._backlog_chosen(self.backlogs.currentItem())
         if outcome.ok:
+            if backlog_id == self.current_backlog_id():
+                self.backlog_panel.guidance.clear()
             count = len(outcome.response.get("test_cases") or [])
             questions = len(outcome.response.get("open_questions") or [])
             self.status_message.emit(f"{count} test case(s) and {questions} open question(s) generated "
@@ -302,3 +332,77 @@ class DesignerWorkspace(QWidget):
                                 "with the run but not used. Try again, or add notes that clarify the backlog.")
         else:
             QMessageBox.warning(self, "Generate test cases", outcome.message)
+
+    # --- history and export -----------------------------------------------------------------------
+
+    def show_history(self) -> None:
+        backlog = self.backlog_panel.backlog
+        if backlog is None:
+            return
+        dialog = HistoryDialog(self.db, backlog.id, f"#{backlog.number} {backlog.title}", self)
+        dialog.exec()
+        if dialog.restored:
+            self._backlog_chosen(self.backlogs.currentItem())
+            self.status_message.emit("An earlier generation was restored.")
+
+    def _workbook_backlog_ids(self) -> list[int]:
+        return [b.id for s in (self.view.sheets if self.view else []) for b in s.backlogs]
+
+    def export(self) -> None:
+        """Spec 8.1 (9): one backlog or every backlog of the workbook that has test cases."""
+        if self.db is None or self.view is None:
+            return
+        backlog = self.backlog_panel.backlog
+        has_cases = bool(self.results_panel.model.cases)
+        all_entries = content.export_entries(self.db, self._workbook_backlog_ids())
+        if not all_entries:
+            QMessageBox.information(self, "Export test cases", "No backlog of this workbook has test cases yet.")
+            return
+        settings = designer_settings.load(self.db)
+        tags = list(dict.fromkeys([*settings.tag_vocabulary,
+                                   *(t for e in all_entries for c in e.test_cases for t in c.get("tags") or [])]))
+        label = f"#{backlog.number} {backlog.title}" if backlog is not None and has_cases else None
+        dialog = ExportDialog(label, len(all_entries), tags if settings.preset().includes("tags") else [], self)
+        if dialog.exec() != ExportDialog.DialogCode.Accepted:
+            return
+        entries = all_entries if dialog.scope() == WORKBOOK else content.export_entries(self.db, [backlog.id])
+        entries = exporter.filter_by_tag(entries, dialog.tag())
+        if not any(e.test_cases for e in entries):
+            QMessageBox.information(self, "Export test cases", "No test case matches the chosen tag.")
+            return
+        entries = [e for e in entries if e.test_cases]
+        fmt, per_backlog = dialog.fmt(), dialog.per_backlog.isChecked()
+        folder = self.export_dir or Path.home()
+        stem = exporter.safe_name(Path(self.view.file_name).stem + (
+            f"-backlog-{entries[0].backlog_key}" if dialog.scope() != WORKBOOK else "") +
+            (f"-{dialog.tag()}" if dialog.tag() else ""))
+        if per_backlog:
+            chosen = QFileDialog.getExistingDirectory(self, "Export test cases to folder", str(folder))
+            target = Path(chosen) / stem if chosen else None
+        else:
+            chosen, _filter = QFileDialog.getSaveFileName(self, "Export test cases", str(folder / f"{stem}.{fmt}"),
+                                                          f"{exporter.FORMATS[fmt]} (*.{fmt})")
+            target = Path(chosen) if chosen else None
+        if target is None:
+            return
+        self.write_export(target, fmt, entries, settings, per_backlog, dialog.tag())
+
+    def write_export(self, target: Path, fmt: str, entries, settings, per_backlog: bool, tag: str) -> list[Path]:
+        try:
+            written = exporter.export(target, fmt, entries, settings, per_backlog)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Export test cases", f"Could not export:\n{exc}")
+            return []
+        content.log_export(self.db, self.tester_name(), fmt, {
+            "workbook_id": self.workbook_id, "backlogs": [f"{e.sheet}|{e.backlog_key}" for e in entries],
+            "tag": tag, "per_backlog": per_backlog, "files": [str(p) for p in written]})
+        cases = sum(len(e.test_cases) for e in entries)
+        self.status_message.emit(f"Exported {cases} test case(s) from {len(entries)} backlog(s) to {target}")
+        box = QMessageBox(QMessageBox.Icon.Information, "Export test cases",
+                          f"Exported {cases} test case(s) from {len(entries)} backlog(s) to:\n{target}", parent=self)
+        folder_button = box.addButton("Show in folder", QMessageBox.ButtonRole.ActionRole)
+        box.addButton(QMessageBox.StandardButton.Close)
+        box.exec()
+        if box.clickedButton() is folder_button:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(target if target.is_dir() else target.parent)))
+        return written

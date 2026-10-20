@@ -4,9 +4,9 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
 
 ## Status
 
-- Done: Step 0 (exploration, plan, decisions below); M0 to M4.
-- In progress: nothing. Waiting for the go-ahead on M5.
-- Next: M5 regenerate with history, tags, exports (JSON, CSV, Excel).
+- Done: Step 0 (exploration, plan, decisions below); M0 to M5.
+- In progress: nothing. Waiting for the go-ahead on M6.
+- Next: M6 Send to Smoke / Regression (checklist runs and "Add as scenarios") and "Copy as prompt"; then the user guide README.md.
 
 | Milestone | Status |
 |---|---|
@@ -15,7 +15,7 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
 | M2 Settings, presets, prompt builder | done (2026-10-20) |
 | M3 Generation, validation, retry, golden fixtures | done (2026-10-20) |
 | M4 Designer UI | done (2026-10-20) |
-| M5 Regenerate, history, tags, exports | not started |
+| M5 Regenerate, history, tags, exports | done (2026-10-20) |
 | M6 Send to Smoke / Regression, Copy as prompt | not started |
 
 ## Decisions (2026-10-19)
@@ -181,6 +181,29 @@ Spec: `TEST_CASE_DESIGNER_SPEC.md` (v3). Build brief: `CLAUDE_CODE_PROMPT.md`.
 - New icons `arrow-up.svg` and `arrow-down.svg` (Lucide, ISC) for Up and Down.
 - Not built here (M5): regenerating with guidance and locked cases, restoring history, tag filtering, and exports.
 - Still to write before the end: `docs/test-case-designer/README.md` (the user guide is part of the definition of done).
+
+## M5 notes
+
+- **Regenerate** (Backlog tab):
+  - After the first generation, the button reads "Regenerate test cases". There is an optional guidance line, sent as `user_guidance`.
+  - "Keep locked test cases (n)" sends the locked cases as `locked_test_cases`.
+  - The app merges the kept cases with the new ones. Happy paths move before corner cases (the order inside each type stays the same), and IDs are renumbered in the final order, so the result meets the spec 5.3 rules.
+  - Locked cases keep their content, and are stored locked again in the new run. Their IDs may change, because the merged set is renumbered.
+  - Every regeneration is a new run.
+- **History** (`history_dialog.py`):
+  - Lists every run, including failures: time, status, number of cases and questions, model, prompt version, guidance, and per-call details.
+  - "Restore this run" makes an earlier valid run current again (`designer_generation_run.restored_at`). The current run is the valid run with the newest `coalesce(restored_at, created_at)`.
+- **Workbook versions** (spec 8.1 (1)):
+  - A backlog in a newer version of a workbook (same family, sheet name, number and occurrence) shows the runs, test cases and notes of the same backlog in earlier versions (`designer_content.linked_ids`). New runs and notes are saved on the newer version.
+  - An older version never shows the runs of a newer one.
+- **Tag filter** (spec 8.1 (8)): "Show" on the Test cases tab (all, or one tag, with counts). It only hides rows.
+- **Export** (spec 8.1 (9), `designer/export.py` and `export_dialog.py`), from the workspace header:
+  - Scope: this backlog, or all backlogs of the workbook that have test cases. An optional tag filter.
+  - JSON: the response object, or an array for several backlogs, or a folder with one file per backlog.
+  - CSV: UTF-8 with BOM, the spec's columns minus any optional fields the preset turns off, tags joined with `;`, steps numbered. Per-step steps are written as `action => expected`.
+  - Excel: "Test Cases" (frozen header, wrapped text) and "Open Questions" (sheet, backlog_number, question).
+  - Every export is logged in `designer_export_log`. "User" is the tester name from Settings, because the app has no accounts.
+- Tests: `tests/test_designer_history_export.py`.
 
 ## Open decisions
 

@@ -100,6 +100,7 @@ class GenerationOutcome:
     user_guidance: str
     stop_reason: str
     attempts: list[dict]
+    locked_ids: list[str] = field(default_factory=list)  # test cases kept locked from the previous run
 
 
 def describe_failure(result: CallResult) -> str:
@@ -128,6 +129,7 @@ class Planner:
         self.feedback = ""
         self.attempts: list[dict] = []
         self.model_id = ""
+        self.locked_ids: list[str] = []  # final IDs of the user's locked test cases
         preset = self.settings.preset()
         self.system_prompt = pb.system_prompt(self.settings, request.backlog_key)
         self.json_schema = json.dumps(pb.api_schema(preset, self.numeric), separators=(",", ":"))
@@ -147,12 +149,25 @@ class Planner:
         return self._spec("first")
 
     def _merge(self, response: dict) -> dict:
+        """Kept cases (locked by the user, or received before a cut-off) first, then the new ones. Happy paths
+        move before corner cases and IDs follow the final order, so the merged answer meets the spec 5.3 rules."""
+        self.locked_ids = []
         if not self.locked:
             return response
-        locked_ids = {c.get("id") for c in self.locked}
+        kept = {c.get("id") for c in self.locked}
+        new = [c for c in response.get("test_cases") or [] if not (isinstance(c, dict) and c.get("id") in kept)]
+        cases = [dict(c) for c in self.locked] + new
+        user_locked = {id(c) for c in cases[:len(self.request.locked_test_cases)]}
+        if all(isinstance(c, dict) for c in cases):
+            cases.sort(key=lambda c: c.get("type") != "happy_path")  # stable: order kept within each type
+            preset = self.settings.preset()
+            number = pb.key_digits(self.request.backlog_key)
+            for seq, case in enumerate(cases, 1):
+                case["id"] = validation.expected_id(preset.id_prefix, preset.backlog_pad, preset.seq_pad, number, seq)
+                if id(case) in user_locked:
+                    self.locked_ids.append(case["id"])
         merged = dict(response)
-        merged["test_cases"] = self.locked + [c for c in response.get("test_cases") or []
-                                              if not (isinstance(c, dict) and c.get("id") in locked_ids)]
+        merged["test_cases"] = cases
         return merged
 
     def on_result(self, kind: str, result: CallResult) -> "CallSpec | GenerationOutcome":
@@ -203,6 +218,7 @@ class Planner:
             model_id=self.model_id, model_resolution=resolution, prompt_version=pb.PROMPT_VERSION,
             settings_snapshot=snapshot(settings), user_guidance=self.request.user_guidance,
             stop_reason=result.stop_reason if result else "", attempts=self.attempts,
+            locked_ids=list(self.locked_ids) if status == "ok" else [],
         )
 
     def insufficient(self) -> GenerationOutcome:

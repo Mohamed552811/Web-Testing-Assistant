@@ -6,6 +6,7 @@ from html import escape
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QGroupBox,
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListView,
     QListWidget,
+    QLineEdit,
     QListWidgetItem,
     QMessageBox,
     QPushButton,
@@ -74,6 +76,7 @@ def _list_box(title: str, list_widget: QListWidget, *buttons: QPushButton) -> QG
 class BacklogPanel(QWidget):
     changed = Signal()  # notes, context or pictures changed (what will be sent)
     generate_requested = Signal()
+    history_requested = Signal()
     cancel_requested = Signal()
 
     def __init__(self, db: Database, parent=None) -> None:
@@ -142,10 +145,24 @@ class BacklogPanel(QWidget):
         self.cancel_button.hide()
         self.progress = QLabel()
         self.progress.setProperty("muted", True)
+        self.guidance = QLineEdit(placeholderText="Guidance for this generation (optional), e.g. focus on permissions")
+        self.guidance.setAccessibleName("Guidance for this generation")
+        self.keep_locked = QCheckBox("Keep locked test cases")
+        self.keep_locked.setToolTip("Locked test cases are sent as test cases to keep unchanged; Claude only adds "
+                                    "what is missing.")
+        self.keep_locked.setChecked(True)
+        self.keep_locked.hide()
+        self.history_button = QPushButton("History…")
+        icons.set_icon(self.history_button, "timer")
+        self.history_button.setEnabled(False)
+        guidance_row = QHBoxLayout()
+        guidance_row.addWidget(self.guidance, 1)
+        guidance_row.addWidget(self.keep_locked)
         generate_row = QHBoxLayout()
         generate_row.addWidget(self.generate_button)
         generate_row.addWidget(self.cancel_button)
         generate_row.addWidget(self.progress, 1)
+        generate_row.addWidget(self.history_button)
 
         body = QWidget()
         layout = QVBoxLayout(body)
@@ -165,6 +182,7 @@ class BacklogPanel(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll, 1)
+        outer.addLayout(guidance_row)
         outer.addLayout(generate_row)
 
         self.attach_button.clicked.connect(self.attach_picture)
@@ -182,6 +200,7 @@ class BacklogPanel(QWidget):
         self.remove_context_button.clicked.connect(lambda: self._remove(self.context))
         self.generate_button.clicked.connect(self.generate_requested)
         self.cancel_button.clicked.connect(self.cancel_requested)
+        self.history_button.clicked.connect(self.history_requested)
         self.pictures.currentRowChanged.connect(lambda _row: self._update_buttons())
         self.notes.currentRowChanged.connect(lambda _row: self._update_buttons())
         self.context.currentRowChanged.connect(lambda _row: self._update_buttons())
@@ -262,6 +281,14 @@ class BacklogPanel(QWidget):
         self.remove_context_button.setEnabled(has and self.context.currentRow() >= 0)
         blocked = has and not self.backlog.text_blocks and not self.backlog.images and self.notes.count() == 0
         self.generate_button.setEnabled(has and not blocked and not self.cancel_button.isVisible())
+
+    def set_generation_state(self, has_run: bool, run_count: int, locked_count: int) -> None:
+        """After the first generation the button regenerates; locked cases can be kept (spec 8.1 (6))."""
+        self.generate_button.setText("Regenerate test cases" if has_run else "Generate test cases")
+        self.keep_locked.setText(f"Keep locked test cases ({locked_count})")
+        self.keep_locked.setVisible(locked_count > 0)
+        self.history_button.setEnabled(run_count > 0)
+        self.history_button.setText(f"History ({run_count})…" if run_count else "History…")
 
     def set_running(self, running: bool, message: str = "") -> None:
         self.cancel_button.setVisible(running)

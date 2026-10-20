@@ -8,7 +8,9 @@ from sqlalchemy import select
 from wta import claude_launcher
 from wta.db import Database
 from wta.db import workbooks as wb
+from wta.db.designer_content import CURRENT_STATUSES, linked_ids
 from wta.db.designer_models import BacklogItem, DesignerTestCase, GenerationRun, OpenQuestion
+from wta.db.models import utcnow
 from wta.designer import prompt_builder as pb
 from wta.designer.generation import GenerationOutcome, GenerationRequest
 from wta.designer.settings import DesignerSettings
@@ -47,7 +49,7 @@ def save_outcome(db: Database, backlog_id: int, outcome: GenerationOutcome) -> i
         if outcome.ok or outcome.status == "insufficient_information":
             for seq, case in enumerate(response.get("test_cases") or [], 1):
                 orm.add(DesignerTestCase(run_id=run.id, backlog_item_id=backlog_id, case_id=case["id"], seq=seq,
-                                         data=case))
+                                         data=case, locked=case["id"] in outcome.locked_ids))
             for text in response.get("open_questions") or []:
                 orm.add(OpenQuestion(backlog_item_id=backlog_id, run_id=run.id, text=text))
         return run.id
@@ -69,13 +71,14 @@ class RunView:
     open_questions: list[str]
     attempts: list[dict]
     settings_snapshot: dict
+    user_guidance: str = ""
 
 
 def _view(run: GenerationRun) -> RunView:
     return RunView(run.id, run.backlog_item_id, run.created_at, run.status, run.message, run.model_id,
                    run.model_resolution, run.prompt_version, run.schema_valid, list(run.validation_errors or []),
                    [c.data for c in run.test_cases if c.deleted_at is None], [q.text for q in run.open_questions],
-                   list(run.attempts or []), dict(run.settings_snapshot or {}))
+                   list(run.attempts or []), dict(run.settings_snapshot or {}), run.user_guidance or "")
 
 
 def load_run(db: Database, run_id: int) -> RunView:
@@ -87,8 +90,19 @@ def load_run(db: Database, run_id: int) -> RunView:
 
 
 def list_runs(db: Database, backlog_id: int) -> list[RunView]:
-    """Newest first."""
+    """All runs of the backlog, including those of the same backlog in earlier workbook versions; newest first."""
     with db.Session() as orm:
-        runs = orm.scalars(select(GenerationRun).where(GenerationRun.backlog_item_id == backlog_id)
+        runs = orm.scalars(select(GenerationRun).where(GenerationRun.backlog_item_id.in_(linked_ids(orm, backlog_id)))
                            .order_by(GenerationRun.id.desc()))
         return [_view(run) for run in runs]
+
+
+def restore_run(db: Database, run_id: int) -> None:
+    """Make an earlier valid run the current one again (spec 8.1 (6)); later runs stay in the history."""
+    with db.Session() as orm, orm.begin():
+        run = orm.get(GenerationRun, run_id)
+        if run is None:
+            raise LookupError(f"Generation run {run_id} not found")
+        if run.status not in CURRENT_STATUSES:
+            raise ValueError("Only a run with valid test cases can be restored.")
+        run.restored_at = utcnow()

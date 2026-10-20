@@ -237,6 +237,9 @@ class ResultsPanel(QWidget):
         self.table.setAccessibleName("Test cases")
         self.summary = QLabel("No test cases yet. Generate them on the Backlog tab.")
         self.summary.setProperty("muted", True)
+        self.tag_filter = QComboBox()
+        self.tag_filter.setAccessibleName("Filter by tag")
+        self.tag_filter.setMinimumWidth(170)
 
         self.add_button = QPushButton("Add")
         self.duplicate_button = QPushButton("Duplicate")
@@ -254,6 +257,10 @@ class ResultsPanel(QWidget):
         for button in (self.add_button, self.duplicate_button, self.delete_button, self.up_button, self.down_button,
                        self.renumber_button):
             tools.addWidget(button)
+        tools.addSpacing(12)
+        self.tag_label = QLabel("Show")
+        tools.addWidget(self.tag_label)
+        tools.addWidget(self.tag_filter)
         tools.addStretch(1)
         hint = QLabel("Double-click a cell to edit. Lists: one item per line.")
         hint.setProperty("muted", True)
@@ -272,6 +279,7 @@ class ResultsPanel(QWidget):
         self.up_button.clicked.connect(lambda: self._move(-1))
         self.down_button.clicked.connect(lambda: self._move(1))
         self.renumber_button.clicked.connect(self.renumber)
+        self.tag_filter.currentIndexChanged.connect(lambda _i: self._apply_filter())
         self.table.selectionModel().selectionChanged.connect(lambda *_: self._update_buttons())
         self._update_buttons()
 
@@ -294,6 +302,8 @@ class ResultsPanel(QWidget):
             row = next((i for i, c in enumerate(cases) if c.row_id == selected), None)
             if row is not None:
                 self.table.selectRow(row)
+        self._fill_tags()
+        self._apply_filter()
         happy = sum(1 for c in cases if c.data.get("type") == "happy_path")
         warned = sum(1 for w in self.model.warnings if w)
         self.summary.setText(
@@ -302,6 +312,31 @@ class ResultsPanel(QWidget):
             else "No test cases yet. Generate them on the Backlog tab.")
         self._update_buttons()
         self.changed.emit()
+
+    def _fill_tags(self) -> None:
+        chosen = self.tag_filter.currentData()
+        tags = list(dict.fromkeys([*self.settings.tag_vocabulary,
+                                   *(t for c in self.model.cases for t in c.data.get("tags") or [])]))
+        self.tag_filter.blockSignals(True)
+        self.tag_filter.clear()
+        self.tag_filter.addItem("All test cases", "")
+        for tag in tags:
+            count = sum(1 for c in self.model.cases if tag in (c.data.get("tags") or []))
+            self.tag_filter.addItem(f"Tag “{tag}” ({count})", tag)
+        index = self.tag_filter.findData(chosen) if chosen else 0
+        self.tag_filter.setCurrentIndex(max(0, index))
+        self.tag_filter.setVisible(self.settings.preset().includes("tags"))
+        self.tag_label.setVisible(self.tag_filter.isVisibleTo(self))
+        self.tag_filter.blockSignals(False)
+
+    def _apply_filter(self) -> None:
+        """Spec 8.1 (8): filter by tag (rows are hidden, nothing is changed)."""
+        tag = self.tag_filter.currentData() or ""
+        for row, case in enumerate(self.model.cases):
+            self.table.setRowHidden(row, bool(tag) and tag not in (case.data.get("tags") or []))
+
+    def visible_cases(self) -> list:
+        return [c for row, c in enumerate(self.model.cases) if not self.table.isRowHidden(row)]
 
     def selected_row_id(self) -> int | None:
         rows = self.table.selectionModel().selectedRows() if self.table.selectionModel() else []

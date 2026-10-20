@@ -165,6 +165,7 @@ class GenerationRun(Base):
     schema_valid: Mapped[bool] = mapped_column(Boolean, default=False)
     validation_errors: Mapped[list[str]] = mapped_column(JSON, default=list)
     attempts: Mapped[list[dict]] = mapped_column(JSON, default=list)  # one entry per claude -p call
+    restored_at: Mapped[datetime | None] = mapped_column(DateTime)  # set when chosen again from history
 
     test_cases: Mapped[list["DesignerTestCase"]] = relationship(
         back_populates="run", cascade="all, delete-orphan", order_by="DesignerTestCase.seq"
@@ -205,6 +206,18 @@ class OpenQuestion(Base):
     answer_note: Mapped[str | None] = mapped_column(Text)
 
     run: Mapped[GenerationRun] = relationship(back_populates="open_questions")
+
+
+class ExportLog(Base):
+    """Each export (spec 8.2 export_log). The app has no user accounts; user is the tester name from Settings."""
+
+    __tablename__ = "designer_export_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user: Mapped[str] = mapped_column(String(100), default="")
+    format: Mapped[str] = mapped_column(String(10))
+    selection: Mapped[dict] = mapped_column(JSON, default=dict)  # backlog ids, tag filter, files written
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class DesignerSetting(Base):

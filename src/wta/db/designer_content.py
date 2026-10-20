@@ -7,7 +7,16 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 
 from wta.db import Database
-from wta.db.designer_models import BacklogContext, BacklogItem, DesignerTestCase, GenerationRun, OpenQuestion
+from wta.db.designer_models import (
+    BacklogContext,
+    BacklogItem,
+    DesignerTestCase,
+    ExportLog,
+    GenerationRun,
+    OpenQuestion,
+    Sheet,
+    Workbook,
+)
 from wta.db.models import utcnow
 from wta.designer import prompt_builder as pb
 from wta.designer.settings import PER_STEP_EXPECTED, DesignerSettings
@@ -16,6 +25,27 @@ from wta.designer.validation import expected_id
 DOMAIN_NOTE = "domain_note"
 SUPPLEMENTARY = "supplementary"
 CURRENT_STATUSES = ("ok", "insufficient_information")
+
+
+# --- the same backlog in earlier versions of the workbook ------------------------------------------
+
+
+def linked_ids(orm, backlog_id: int) -> list[int]:
+    """This backlog and the same backlog (sheet name + number + occurrence) in earlier versions of its workbook,
+    newest first. Notes, runs and test cases follow a backlog to a new version this way (spec 8.1 (1))."""
+    item = orm.get(BacklogItem, backlog_id)
+    if item is None:
+        return [backlog_id]
+    sheet, workbook = item.sheet, item.sheet.workbook
+    rows = orm.execute(
+        select(BacklogItem.id, BacklogItem.number)
+        .join(Sheet, BacklogItem.sheet_id == Sheet.id).join(Workbook, Sheet.workbook_id == Workbook.id)
+        .where(Workbook.family == workbook.family, Workbook.id <= workbook.id, Sheet.name == sheet.name,
+               BacklogItem.occurrence == item.occurrence)
+        .order_by(Workbook.id.desc())
+    )
+    linked = [row_id for row_id, number in rows if number.lower() == item.number.lower()]
+    return linked or [backlog_id]
 
 
 # --- notes and supplementary context --------------------------------------------------------------
@@ -31,7 +61,7 @@ class ContextItem:
 
 def list_context(db: Database, backlog_id: int, kind: str | None = None) -> list[ContextItem]:
     with db.Session() as orm:
-        query = select(BacklogContext).where(BacklogContext.backlog_item_id == backlog_id)
+        query = select(BacklogContext).where(BacklogContext.backlog_item_id.in_(linked_ids(orm, backlog_id)))
         if kind:
             query = query.where(BacklogContext.kind == kind)
         rows = orm.scalars(query.order_by(BacklogContext.kind, BacklogContext.position, BacklogContext.id))
@@ -95,11 +125,15 @@ def backlog_as_context(db: Database, backlog_id: int) -> tuple[str, str]:
 
 
 def current_run_id(db: Database, backlog_id: int) -> int | None:
-    """The newest run whose answer was valid (M5 adds restoring an older one)."""
+    """The valid run shown for a backlog: the newest one, or the one last restored from history."""
     with db.Session() as orm:
-        return orm.scalar(select(GenerationRun.id).where(GenerationRun.backlog_item_id == backlog_id,
-                                                         GenerationRun.status.in_(CURRENT_STATUSES))
-                          .order_by(GenerationRun.id.desc()).limit(1))
+        return orm.scalar(
+            select(GenerationRun.id)
+            .where(GenerationRun.backlog_item_id.in_(linked_ids(orm, backlog_id)),
+                   GenerationRun.status.in_(CURRENT_STATUSES))
+            .order_by(func.coalesce(GenerationRun.restored_at, GenerationRun.created_at).desc(),
+                      GenerationRun.id.desc())
+            .limit(1))
 
 
 @dataclass
@@ -215,7 +249,8 @@ def add_case(db: Database, backlog_id: int, data: dict, after_row_id: int | None
     with db.Session() as orm, orm.begin():
         rows = _live_rows(orm, run_id)
         index = next((i + 1 for i, r in enumerate(rows) if r.id == after_row_id), len(rows))
-        row = DesignerTestCase(run_id=run_id, backlog_item_id=backlog_id, case_id=str(data.get("id", "")),
+        owner = orm.get(GenerationRun, run_id).backlog_item_id  # may be the same backlog in an earlier version
+        row = DesignerTestCase(run_id=run_id, backlog_item_id=owner, case_id=str(data.get("id", "")),
                                seq=0, data=copy.deepcopy(data), edited=True)
         orm.add(row)
         rows.insert(index, row)
@@ -265,3 +300,28 @@ def renumber(db: Database, backlog_id: int, settings: DesignerSettings, backlog_
                 data = dict(row.data)
                 data["id"] = new_id
                 row.data, row.case_id = data, new_id
+
+
+# --- export -----------------------------------------------------------------------------------------
+
+
+def export_entries(db: Database, backlog_ids: list[int]):
+    """The current test cases and open questions of each backlog that has any, in the given order."""
+    from wta.designer.export import ExportEntry  # the writers need no database
+
+    entries = []
+    for backlog_id in backlog_ids:
+        cases = current_cases(db, backlog_id)
+        if not cases:
+            continue
+        with db.Session() as orm:
+            item = orm.get(BacklogItem, backlog_id)
+            sheet, key, title = item.sheet.name, item.number, item.title
+        entries.append(ExportEntry(sheet, key, title, [c.data for c in cases],
+                                   [q.text for q in list_questions(db, backlog_id)]))
+    return entries
+
+
+def log_export(db: Database, user: str, fmt: str, selection: dict) -> None:
+    with db.Session() as orm, orm.begin():
+        orm.add(ExportLog(user=user, format=fmt, selection=selection))

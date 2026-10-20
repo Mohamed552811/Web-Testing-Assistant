@@ -191,6 +191,8 @@ class MainWindow(QMainWindow):
             "" if self.top_bar.signed_in else "Claude Code must be installed and signed in (Help, Check setup).")
         self.designer_workspace.remember = self._remember
         self.designer_workspace.recall = lambda key: self._ui_state().value(key)
+        self.designer_workspace.export_dir = self.app_dir / "exports"
+        self.designer_workspace.tester_name = lambda: self.settings.tester_name
         self.designer_workspace.status_message.connect(lambda text: self.statusBar().showMessage(text, 15000))
         self.designer_workspace.change_workbook_requested.connect(
             lambda: self.pages.setCurrentWidget(self.designer_setup))
