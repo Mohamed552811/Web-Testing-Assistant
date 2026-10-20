@@ -20,6 +20,8 @@ credentials or OAuth tokens, never call Anthropic usage endpoints.
 - Small commits, a test for each non-trivial module, no features beyond the current phase, ask me before adding dependencies you were not told about.
 
 ## Working notes
+- Versioning (decided 2026-10-20): follow the `A.B.C` rules in README.md, Versioning. Set the version when a branch
+  is created from `pre-release` and in every merge into `pre-release` or `main`, in both `src/wta/__init__.py` and `pyproject.toml`.
 - Stop after each phase and wait for review before starting the next one.
 - Check `claude --help` and the official docs for CLI flags, stream formats, status line fields
   and Playwright MCP options; do not guess them.

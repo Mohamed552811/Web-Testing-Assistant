@@ -110,6 +110,28 @@ The bar at the top shows Claude Code sign-in and your 5-hour and weekly plan usa
 
 Set `WTA_DATA_DIR` to use a different folder, for example a throwaway one for trying things out.
 
+## Versioning
+
+Every branch carries a version `A.B.C` in `src/wta/__init__.py` (`__version__`) and `pyproject.toml` (`version`). Keep both the same. The rules apply to everyone working in this repository:
+
+| Number | Counts | Changes when |
+|---|---|---|
+| **A** (first) | merges of `pre-release` into `main` | `pre-release` is merged into `main`: A + 1 |
+| **B** (middle) | merges of a branch into `pre-release` | a branch is merged into `pre-release`: B + 1, C back to 1 |
+| **C** (last) | branches created from `pre-release` since its last merge | a branch is created from `pre-release`: the n-th new branch gets C = n + 1 |
+
+- `pre-release` itself always ends in `.1`.
+- A branch created from `pre-release` takes `pre-release`'s version with its own last number. When it is merged back, `pre-release` gets B + 1 and C = 1. The branch's last number is not kept.
+- A merge into `main` takes `pre-release`'s version with A + 1. `main` and `pre-release` then both carry that version.
+
+Example, starting from `main` 1.0.0 and `pre-release` 1.1.1:
+
+1. The first new branch from `pre-release` is 1.1.2, and the next one is 1.1.3.
+2. Merging one of them into `pre-release` makes `pre-release` 1.2.1. The next new branch is 1.2.2, because the count restarts after a merge.
+3. Merging `pre-release` into `main` makes both 2.2.1.
+
+`redesign-app-features` was created before these rules. It carries `pre-release`'s version until it is merged, and the merge makes `pre-release` 1.2.1.
+
 ## Development
 
 Run the tests:
