@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QFileDialog,
+    QGridLayout,
+    QHBoxLayout,
     QMainWindow,
     QMessageBox,
     QSizePolicy,
@@ -53,6 +55,7 @@ from wta.highlight import Highlighter, highlight_path
 from wta.page_monitor import PageMonitor
 from wta.processes import ProcessRegistry
 from wta.scroll import scrollable
+from wta.split_layout import BROWSER, ExpandButton, SplitLayout, layout_buttons
 from wta.results import ConfirmationRequest
 from wta.db import Database, store
 from wta.db import runs as run_store
@@ -177,10 +180,26 @@ class MainWindow(QMainWindow):
         # minimum (a scrollbar appears) and the browser can take most of the window.
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.left)
-        splitter.addWidget(scrollable(self.tabs))
-        splitter.setCollapsible(1, False)  # dragging far right stops at the scroll area's minimum, not a hidden panel
-        splitter.setSizes([850, 750])
+        # The layout buttons sit over the right end of the tab bar, outside the scroll area, so they stay
+        # visible when the tabs are narrower than they want and scroll sideways.
+        work_side = QWidget()
+        work_grid = QGridLayout(work_side)
+        work_grid.setContentsMargins(0, 0, 0, 0)
+        self.work_scroll = scrollable(self.tabs)
+        work_grid.addWidget(self.work_scroll, 0, 0)
+        splitter.addWidget(work_side)
         self.splitter = splitter
+        # Resize by dragging; swap, stack or expand either side. Never remembered: each start shows half each.
+        self.split_layout = SplitLayout(splitter, self.left, work_side, self)
+        self.browser.add_toolbar_widget(ExpandButton(self.split_layout, BROWSER))
+        corner = QWidget()
+        corner_row = QHBoxLayout(corner)
+        corner_row.setContentsMargins(0, 2, 6, 0)
+        corner_row.setSpacing(0)
+        for button in layout_buttons(self.split_layout):
+            corner_row.addWidget(button)
+        work_grid.addWidget(corner, 0, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+        self.layout_buttons = corner
 
         # Pages: the Launchpad first, then the mode's workspace (Smoke and Regression share the splitter).
         self.mode: str | None = None
@@ -597,8 +616,6 @@ class MainWindow(QMainWindow):
         state = self._ui_state()
         if state.value("geometry") is not None:
             self.restoreGeometry(state.value("geometry"))
-        if state.value("splitter") is not None:
-            self.splitter.restoreState(state.value("splitter"))
         tab = state.value("tab")
         if tab is not None and 0 <= int(tab) < self.tabs.count():
             self.tabs.setCurrentIndex(int(tab))
@@ -606,7 +623,6 @@ class MainWindow(QMainWindow):
     def _save_ui_state(self) -> None:
         state = self._ui_state()
         state.setValue("geometry", self.saveGeometry())
-        state.setValue("splitter", self.splitter.saveState())
         state.setValue("tab", self.tabs.currentIndex())
         if self.current_session is not None:
             state.setValue("last_session_id", self.current_session.id)

@@ -74,6 +74,8 @@ The app opens on the **Launchpad** with three modes:
 
 Switch modes with the mode button or **Mode** in the menu bar (Alt+M); **Back to Launchpad** is Ctrl+L. Each testing mode shows only its own tab: **Scenarios** in Regression, **Smoke test** in Smoke. Both have **Live run**, **Runs** and **Checklists** (manual checklist runs handed over from Test Case Design).
 
+In Regression and Smoke the browser and the work panel share the tab: drag the divider to resize them, and use the buttons at the top right of the panel to **swap** the sides, **stack** them (one above the other) or **reset** the layout. Each side has an **expand** button (the browser's is at the end of its address bar) that lets it fill the tab; click it again to bring both back. The layout is not saved: the app always opens with both sides, half each.
+
 The toolbar of Regression and Smoke holds the session and browser actions: **New session**, **Open session**, **Details**, **Run batch**, **Stop**, **Export**, **Settings**, **Connection** (Claude's browser connection) and **Close browsers**. App settings are also in **Tools**, and **Quit** is in **Mode** (Ctrl+Q).
 
 1. **New session** (toolbar): enter the target URL, allowed domains, viewport and a test-environment account. You can add **other accounts** (roles such as "Sales manager") and choose a **folder of files Claude may upload**; each scenario or smoke page can then **run as** one of the accounts.

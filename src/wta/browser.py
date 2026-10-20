@@ -133,6 +133,7 @@ class BrowserPane(QWidget):
         for button in (self.back_button, self.forward_button, self.reload_button):
             toolbar.addWidget(button)
         toolbar.addWidget(self.url_bar, 1)
+        self._toolbar = toolbar
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -151,6 +152,10 @@ class BrowserPane(QWidget):
         self.view.loadStarted.connect(self._on_load_started)
         self.view.loadProgress.connect(self.progress.setValue)
         self.view.loadFinished.connect(self._on_load_finished)
+
+    def add_toolbar_widget(self, widget: QWidget) -> None:
+        """A control at the end of the address bar row (the main window adds Expand there)."""
+        self._toolbar.addWidget(widget)
 
     def open_popup(self) -> PopupWindow:
         popup = PopupWindow(self)

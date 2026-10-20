@@ -61,7 +61,7 @@ class MainWindowTests(unittest.TestCase):
         self.assertGreater(tabs_width, 0)  # narrowed, not collapsed away
         # The tall Runs tab no longer sets the height of the others, so Scenarios does not scroll as a whole.
         self.assertLess(window.tabs.minimumSizeHint().height(), window.runs_tab.minimumSizeHint().height())
-        self.assertFalse(window.splitter.widget(1).verticalScrollBar().isVisible())
+        self.assertFalse(window.work_scroll.verticalScrollBar().isVisible())
         window.deleteLater()
 
     def test_export_uses_file_extension_or_default_format(self):
