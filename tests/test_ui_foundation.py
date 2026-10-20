@@ -36,15 +36,16 @@ class ThemeTests(unittest.TestCase):
     def tearDown(self):
         theme.apply(app, "light")
 
-    def test_light_and_dark_use_the_brick_red_accent(self):
-        self.assertEqual(theme.resolve("light").accent, "#9B2D20")
+    def test_light_is_teal_and_dark_brick_red(self):
+        self.assertEqual(theme.resolve("light").accent, "#0F766E")
         self.assertEqual(theme.resolve("dark").accent, "#C8553D")
         theme.apply(app, "dark")
         self.assertIn("#C8553D", app.styleSheet())
         self.assertEqual(app.palette().color(QPalette.ColorRole.Highlight), QColor("#C8553D"))
         self.assertEqual(app.palette().color(QPalette.ColorRole.Window), QColor(theme.DARK.window))
         theme.apply(app, "light")
-        self.assertEqual(app.palette().color(QPalette.ColorRole.Highlight), QColor("#9B2D20"))
+        self.assertEqual(app.palette().color(QPalette.ColorRole.Highlight), QColor("#0F766E"))
+        self.assertEqual(app.palette().color(QPalette.ColorRole.Window), QColor("#f6f1e7"))  # cream white
         self.assertIn(theme.resolve("system"), (theme.LIGHT, theme.DARK))
 
     def test_fail_status_is_not_the_accent(self):
@@ -123,8 +124,11 @@ class MainWindowUiTests(unittest.TestCase):
     def test_toolbar(self):
         w = self.window()
         texts = [a.text().replace("&", "") for a in w.toolbar.actions() if a.text()]
-        self.assertEqual(texts, ["New session…", "Open session…", "Run batch", "Stop", "Export report…",
-                                 "Settings…", "Close all browsers"])
+        self.assertEqual(texts, ["New session…", "Open session…", "Session details…", "Run batch", "Stop",
+                                 "Export report…", "Settings…", "Claude connection…", "Close all browsers"])
+        shown = [a.iconText() for a in w.toolbar.actions() if a.text()]  # short labels so the row fits
+        self.assertEqual(shown[2:], ["Details", "Run batch", "Stop", "Export", "Settings", "Connection",
+                                     "Close browsers"])
         self.assertTrue(all(not a.icon().isNull() for a in w.toolbar.actions() if a.text()))
         self.assertFalse(w.run_action.isEnabled())  # no session, not signed in
         self.assertFalse(w.stop_action.isEnabled())

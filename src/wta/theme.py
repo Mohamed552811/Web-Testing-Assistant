@@ -1,4 +1,4 @@
-"""Light and dark themes with the dark brick-red accent.
+"""Themes: light is cream white with a teal accent; dark keeps the brick-red accent.
 
 "system" follows Windows' light/dark setting and switches live when it changes. Status colours
 (Pass/Fail/Blocked) are separate from the accent, so a Fail never looks like a highlighted button.
@@ -34,10 +34,10 @@ class Palette:
     badge_warn_text: str
 
 
-LIGHT = Palette(
-    window="#f4f5f7", panel="#ffffff", base="#ffffff", alt="#f6f7f9", text="#1f2933", muted="#5f6b76",
-    border="#d3d8de", accent="#9B2D20", accent_hover="#B23A2A", accent_text="#ffffff",
-    selection="#f2d6d1", selection_text="#1f2933", header="#eceef2",
+LIGHT = Palette(  # cream white, teal accent
+    window="#f6f1e7", panel="#fffcf5", base="#fffdf8", alt="#f8f3e9", text="#22302e", muted="#66706b",
+    border="#e1d8c6", accent="#0F766E", accent_hover="#138A80", accent_text="#ffffff",
+    selection="#cfe9e5", selection_text="#22302e", header="#efe8da",
     badge_ok="#dcf2e3", badge_ok_text="#1d6b3a", badge_warn="#fbeccb", badge_warn_text="#7a4b00",
 )
 DARK = Palette(

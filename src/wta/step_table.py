@@ -119,7 +119,7 @@ class StepTableModel(QAbstractTableModel):
 
 # --- status badges ----------------------------------------------------------------
 
-# Solid badge colours. Fail/Bug is a bright red, deliberately unlike the brick-red accent.
+# Solid badge colours. Fail/Bug is a bright red, deliberately unlike the accent colours.
 BADGE_COLORS = {
     StepStatus.PASS: "#2E8B57",
     StepStatus.FAIL: "#E5484D",

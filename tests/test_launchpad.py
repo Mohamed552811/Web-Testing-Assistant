@@ -47,6 +47,38 @@ class LaunchpadTests(unittest.TestCase):
         self.windows.append(window)
         return window
 
+    def test_each_testing_mode_shows_only_its_own_review_tab(self):
+        window = self.window()
+        tabs = window.tabs
+        visible = lambda: [tabs.tabText(i) for i in range(tabs.count()) if tabs.isTabVisible(i)]  # noqa: E731
+        window.set_mode(modes.REGRESSION)
+        self.assertEqual(visible(), ["Scenarios", "Live run", "Runs", "Checklists"])
+        self.assertIs(tabs.currentWidget(), window.scenario_tab)
+        window.set_mode(modes.SMOKE)
+        self.assertEqual(visible(), ["Smoke test", "Live run", "Runs", "Checklists"])
+        self.assertIs(tabs.currentWidget(), window.smoke_tab)
+        self.assertIs(window.mode_tab(), window.smoke_tab)
+        window.set_mode(modes.REGRESSION)
+        self.assertIs(window.mode_tab(), window.scenario_tab)
+
+    def test_session_and_browser_actions_are_only_on_the_testing_toolbar(self):
+        window = self.window()
+        menus = [a.text() for a in window.menuBar().actions()]
+        self.assertNotIn("&Session", menus)
+        self.assertNotIn("&Browser", menus)
+        self.assertEqual(menus[0], "&Mode")
+        self.assertIn(window.quit_action, window.mode_menu.actions())
+        on_toolbar = window.toolbar.actions()
+        for action in (window.new_action, window.open_action, window.details_action, window.run_action,
+                       window.stop_action, window.export_action, window.settings_action, window.connection_action,
+                       window.close_all_action):
+            self.assertIn(action, on_toolbar, action.text())
+        self.assertFalse(window.toolbar.isVisible())  # on the Launchpad
+        window.set_mode(modes.DESIGN)
+        self.assertFalse(window.toolbar.isVisible())
+        window.set_mode(modes.SMOKE)
+        self.assertTrue(window.toolbar.isVisible())
+
     def test_opens_on_the_launchpad_with_three_cards(self):
         window = self.window()
         self.assertIs(window.pages.currentWidget(), window.launchpad)

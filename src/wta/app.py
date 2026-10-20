@@ -237,14 +237,14 @@ class MainWindow(QMainWindow):
             self.top_bar.check_sign_in()
 
     def _build_menu(self) -> None:
-        menu = self.menuBar().addMenu("&Session")
-
+        """Session and browser actions are only used in Smoke and Regression, so they are on that mode's toolbar
+        (shown only there), not in the menu bar. App settings are in Tools; Quit is in the Mode menu."""
         self.new_action = QAction("&New session…", self, shortcut=QKeySequence.StandardKey.New)
         self.open_action = QAction("&Open session…", self, shortcut=QKeySequence.StandardKey.Open)
         self.details_action = QAction("Session &details…", self, enabled=False)
         self.export_action = QAction("&Export report…", self, enabled=False, shortcut=QKeySequence("Ctrl+E"))
         self.settings_action = QAction("Se&ttings…", self, shortcut=QKeySequence("Ctrl+,"))
-        quit_action = QAction("&Quit", self, shortcut=QKeySequence.StandardKey.Quit)
+        self.quit_action = QAction("&Quit", self, shortcut=QKeySequence.StandardKey.Quit)
 
         self.new_action.triggered.connect(self.new_session)
         self.open_action.triggered.connect(self.open_session)
@@ -252,22 +252,13 @@ class MainWindow(QMainWindow):
         # lambda: triggered(bool) would otherwise pass `checked` as the path.
         self.export_action.triggered.connect(lambda: self.export_report())
         self.settings_action.triggered.connect(self.edit_settings)
-        quit_action.triggered.connect(self.close)
+        self.quit_action.triggered.connect(self.close)
+        self.addAction(self.quit_action)  # Ctrl+Q works in every mode
 
-        menu.addActions([self.new_action, self.open_action, self.details_action])
-        menu.addSeparator()
-        menu.addAction(self.export_action)
-        menu.addAction(self.settings_action)
-        menu.addSeparator()
-        menu.addAction(quit_action)
-
-        browser_menu = self.menuBar().addMenu("&Browser")
         self.connection_action = QAction("&Claude connection…", self, enabled=self.cdp_port is not None)
         self.connection_action.triggered.connect(self.show_connection)
-        browser_menu.addAction(self.connection_action)
         self.close_all_action = QAction("Close &all browsers", self)
         self.close_all_action.triggered.connect(self.close_all_browsers)
-        browser_menu.addAction(self.close_all_action)
 
         self.run_action = QAction("&Run batch", self, shortcut=QKeySequence("F5"))
         self.run_action.setToolTip("Run the batch on the Scenarios or Smoke test tab (F5)")
@@ -285,6 +276,8 @@ class MainWindow(QMainWindow):
         self.housekeeping_action = QAction("&Clean up and back up…", self)
         self.housekeeping_action.triggered.connect(self.show_housekeeping)
         tools_menu.addAction(self.housekeeping_action)
+        tools_menu.addSeparator()
+        tools_menu.addAction(self.settings_action)
 
         help_menu = self.menuBar().addMenu("&Help")
         setup_action = QAction("Check &setup…", self)
@@ -304,15 +297,21 @@ class MainWindow(QMainWindow):
         for action, name in ((self.new_action, "file-plus"), (self.open_action, "folder-open"),
                              (self.run_action, "play"), (self.stop_action, "square"),
                              (self.export_action, "download"), (self.settings_action, "settings"),
+                             (self.details_action, "pencil"), (self.connection_action, "globe"),
                              (self.close_all_action, "circle-x")):
             icons.set_icon(action, name, "accent" if action is self.run_action else None)
-        toolbar.addActions([self.new_action, self.open_action])
+        # Short toolbar labels so every action fits next to the mode switcher (menus and tooltips keep the full names).
+        for action, short in ((self.details_action, "Details"), (self.export_action, "Export"),
+                              (self.connection_action, "Connection"), (self.close_all_action, "Close browsers")):
+            action.setIconText(short)
+            action.setToolTip(action.text().replace("&", "").rstrip("…"))
+        toolbar.addActions([self.new_action, self.open_action, self.details_action])
         toolbar.addSeparator()
         toolbar.addActions([self.run_action, self.stop_action])
         toolbar.addSeparator()
         toolbar.addActions([self.export_action, self.settings_action])
         toolbar.addSeparator()
-        toolbar.addAction(self.close_all_action)
+        toolbar.addActions([self.connection_action, self.close_all_action])
         self.addToolBar(toolbar)
         self.toolbar = toolbar
 
@@ -334,6 +333,8 @@ class MainWindow(QMainWindow):
         self.launchpad_action.triggered.connect(self.show_launchpad)
         icons.set_icon(self.launchpad_action, "arrow-left")
         menu.addAction(self.launchpad_action)
+        menu.addSeparator()
+        menu.addAction(self.quit_action)
         self.menuBar().insertMenu(self.menuBar().actions()[0], menu)
         self.mode_menu = menu
 
@@ -394,7 +395,10 @@ class MainWindow(QMainWindow):
             self.pages.setCurrentWidget(self.splitter)
             self.checklist_tab.set_mode(checklists.SMOKE if mode == modes.SMOKE else checklists.REGRESSION)
             self.checklist_tab.refresh()
-            self.tabs.setCurrentWidget(self.smoke_tab if mode == modes.SMOKE else self.scenario_tab)
+            # Regression works with the normal scenarios, Smoke with the smoke test; each mode shows only its own.
+            self.tabs.setTabVisible(self.tabs.indexOf(self.scenario_tab), mode == modes.REGRESSION)
+            self.tabs.setTabVisible(self.tabs.indexOf(self.smoke_tab), mode == modes.SMOKE)
+            self.tabs.setCurrentWidget(self.mode_tab())
         else:
             self._refresh_workbooks()
             self.pages.setCurrentWidget(self.designer_setup)
@@ -492,9 +496,10 @@ class MainWindow(QMainWindow):
         view = workbook_store.load_workbook(self.db, workbook_id)
         if not view.sheets:
             return
-        dialog = MappingDialog(view.sheets, sheet_id, self)
+        dialog = MappingDialog(view.sheets, sheet_id, self, view.product_context)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
+        workbook_store.set_product_context(self.db, workbook_id, dialog.product_context())
         sheet = workbook_store.apply_mapping(self.db, dialog.selected_sheet_id(), dialog.result_mapping())
         self._refresh_workbooks(workbook_id)
         self.statusBar().showMessage(f"Sheet “{sheet.name}”: {len(sheet.backlogs)} backlog(s) with the new mapping.", 8000)
@@ -564,12 +569,14 @@ class MainWindow(QMainWindow):
             page.setSizePolicy(policy, policy)
         stack.updateGeometry()
 
+    def mode_tab(self) -> ScenarioTab:
+        """The review tab of the current mode: Smoke test in Smoke, Scenarios in Regression."""
+        return self.smoke_tab if self.mode == modes.SMOKE else self.scenario_tab
+
     def run_current_tab(self) -> None:
-        """Toolbar Run: the batch on the Scenarios or Smoke test tab, whichever is showing (Scenarios otherwise)."""
-        tab = self.tabs.currentWidget()
-        if tab not in self.review_tabs:
-            tab = self.scenario_tab
-            self.tabs.setCurrentWidget(tab)
+        """Toolbar Run: the batch of the current mode's tab (Scenarios in Regression, Smoke test in Smoke)."""
+        tab = self.mode_tab()
+        self.tabs.setCurrentWidget(tab)
         if tab.run_button.isEnabled():
             tab.run_button.click()
 
@@ -614,7 +621,8 @@ class MainWindow(QMainWindow):
             return False
         tab = self.tabs.currentIndex()
         self.show_session(session)
-        self.tabs.setCurrentIndex(tab)
+        if self.tabs.isTabVisible(tab):
+            self.tabs.setCurrentIndex(tab)
         return True
 
     def edit_settings(self) -> None:
@@ -911,7 +919,11 @@ class MainWindow(QMainWindow):
             self.open_session_by_id(hit.session_id)
         if hit.scenario_id is None:
             return
-        tab = self.smoke_tab if sc.scenario_kind(self.db, hit.scenario_id) == ScenarioKind.SMOKE else self.scenario_tab
+        smoke = sc.scenario_kind(self.db, hit.scenario_id) == ScenarioKind.SMOKE
+        wanted = modes.SMOKE if smoke else modes.REGRESSION
+        if self.mode != wanted:
+            self.set_mode(wanted)  # each mode shows only its own review tab
+        tab = self.mode_tab()
         self.tabs.setCurrentWidget(tab)
         tab.show_scenario(hit.scenario_id, hit.step_id)
 
