@@ -129,16 +129,40 @@ class TopBarTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "usage.json"
             bar = TopBar(path)
-            self.assertEqual(bar.five_hour.bar.format(), "no data")
+            self.assertEqual(bar.five_hour.value.text(), "–")
             usage.save(path, {"five_hour": usage.WindowUsage(62.0, 2000, 10),
                               "seven_day": usage.WindowUsage(12.0, 5000, 10)})
             bar.refresh_usage(now=1000)
-            self.assertEqual(bar.five_hour.bar.format(), "62%")
+            self.assertEqual(bar.five_hour.value.text(), "62%")
+            self.assertEqual(bar.five_hour.bar.value(), 620)
             self.assertIn("#d29922", bar.five_hour.bar.styleSheet())  # yellow
+            self.assertTrue(bar.five_hour.reset.text().startswith("resets "))
             bar.refresh_usage(now=3000)
-            self.assertEqual(bar.five_hour.bar.format(), "62% (stale)")
-            self.assertEqual(bar.seven_day.bar.format(), "12%")
+            # After the reset the old reading no longer applies: shown as unknown, not as 62%.
+            self.assertEqual(bar.five_hour.value.text(), "–")
+            self.assertEqual(bar.five_hour.bar.value(), 0)
+            self.assertIn("62%", bar.five_hour.bar.toolTip())
+            self.assertEqual(bar.seven_day.value.text(), "12%")
             self.assertTrue(bar.updated.text().startswith("Updated"))
+            bar.deleteLater()
+
+    def test_manual_refresh_records_claude_reading(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "usage.json"
+            bar = TopBar(path)
+            with mock.patch.object(bar._refresher, "run"):
+                bar.refresh_from_claude()
+            self.assertFalse(bar.refresh_button.isEnabled())
+            self.assertEqual(bar.updated.text(), "Updating…")
+            far = 4_000_000_000
+            bar._on_refreshed({"unifiedWindows": {"five_hour": {"utilization": 0.03, "resetsAt": far},
+                                                  "seven_day": {"utilization": 0.37, "resetsAt": far}}}, "")
+            self.assertTrue(bar.refresh_button.isEnabled())
+            self.assertEqual((bar.five_hour.value.text(), bar.seven_day.value.text()), ("3%", "37%"))
+            self.assertEqual(usage.load(path)["seven_day"].percent, 37.0)
+            bar._on_refreshed(None, "Claude Code did not report plan usage.")
+            self.assertEqual(bar.updated.text(), "Refresh failed")
+            self.assertIn("did not report", bar.updated.toolTip())
             bar.deleteLater()
 
     def test_level_colours(self):
@@ -147,3 +171,24 @@ class TopBarTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReadPlanUsageTests(unittest.TestCase):
+    def test_returns_claude_codes_rate_limit_info(self):
+        out = '{"type":"system"}\nnot json\n{"type":"rate_limit_event","rate_limit_info":{"utilization":0.2}}\n'
+        done = mock.Mock(returncode=0, stdout=out)
+        with mock.patch.object(claude_launcher, "find_claude", return_value=["claude"]), \
+                mock.patch.object(claude_launcher.subprocess, "run", return_value=done) as run:
+            info, error = claude_launcher.read_plan_usage()
+        self.assertEqual((info, error), ({"utilization": 0.2}, ""))
+        args = run.call_args.args[0]
+        self.assertIn("--tools=", args)
+        self.assertEqual(args[args.index("--model") + 1], "haiku")
+        self.assertNotIn("ANTHROPIC_API_KEY", run.call_args.kwargs["env"])
+
+    def test_explains_when_nothing_reported(self):
+        with mock.patch.object(claude_launcher, "find_claude", return_value=None):
+            self.assertIn("not installed", claude_launcher.read_plan_usage()[1])
+        with mock.patch.object(claude_launcher, "find_claude", return_value=["claude"]), \
+                mock.patch.object(claude_launcher.subprocess, "run", return_value=mock.Mock(returncode=1, stdout="")):
+            self.assertEqual(claude_launcher.read_plan_usage(), (None, "Claude Code did not report plan usage (exit code 1)."))

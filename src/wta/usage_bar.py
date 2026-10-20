@@ -5,10 +5,10 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QFileSystemWatcher, QObject, QTimer, Signal
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QPushButton, QWidget
+from PySide6.QtCore import QFileSystemWatcher, QObject, Qt, QTimer, Signal
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QPushButton, QToolButton, QWidget
 
-from wta import claude_launcher, usage
+from wta import claude_launcher, icons, usage
 
 GREEN, YELLOW, RED, GREY = "#2ea043", "#d29922", "#da3633", "#6e7681"
 
@@ -24,53 +24,71 @@ def format_reset(resets_at: int, now: float | None = None) -> str:
 
 
 class _WindowBar(QWidget):
-    """A compact gauge; the reset time is shown on hover."""
+    """A slim gauge with the percentage and reset time beside it; details on hover."""
 
     def __init__(self, title: str, parent=None) -> None:
         super().__init__(parent)
         self.title = QLabel(title)
         self.title.setProperty("muted", True)
-        self.bar = QProgressBar(minimum=0, maximum=1000, textVisible=True)
-        self.bar.setFixedWidth(110)
-        self.bar.setFixedHeight(14)
-        self.reset = QLabel()  # not shown; its text is the hover text
+        self.bar = QProgressBar(minimum=0, maximum=1000, textVisible=False)
+        self.bar.setFixedSize(90, 6)
+        self.value = QLabel()
+        self.value.setMinimumWidth(34)
+        self.reset = QLabel()
+        self.reset.setProperty("muted", True)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
         layout.addWidget(self.title)
-        layout.addWidget(self.bar)
+        layout.addWidget(self.bar, 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self.value)
+        layout.addWidget(self.reset)
         self.show_reading(None)
 
     def show_reading(self, reading: usage.WindowUsage | None, now: float | None = None) -> None:
         if reading is None:
             self.bar.setValue(0)
-            self.bar.setFormat("no data")
-            self._color(GREY)
-            self.reset.setText("")
-            self._hover("No usage reported yet. It fills in during the first test run.")
+            self._show("–", GREY, "")
+            self._hover("No usage reported yet. Use refresh, or it fills in during the first test run.")
+            return
+        if reading.is_stale(now):
+            # The window has reset since this reading; the old number no longer applies.
+            self.bar.setValue(0)
+            self._show("–", GREY, "needs refresh")
+            self._hover(f"{self.title.text()} window reset at {format_reset(reading.resets_at, now)}; "
+                        f"the last reading ({reading.percent:.0f}%) is out of date. Click refresh.")
             return
         self.bar.setValue(int(min(reading.percent, 100) * 10))
-        if reading.is_stale(now):
-            self.bar.setFormat(f"{reading.percent:.0f}% (stale)")
-            self._color(GREY)
-            self.reset.setText(f"reset {format_reset(reading.resets_at, now)} passed")
-        else:
-            self.bar.setFormat(f"{reading.percent:.0f}%")
-            self._color(level_color(reading.percent))
-            self.reset.setText(f"resets {format_reset(reading.resets_at, now)}")
-        self._hover(f"{self.title.text()} window: {reading.percent:.0f}% used, {self.reset.text()}.")
+        resets = format_reset(reading.resets_at, now)
+        self._show(f"{reading.percent:.0f}%", level_color(reading.percent), f"resets {resets}")
+        self._hover(f"{self.title.text()} window: {reading.percent:.0f}% used, resets {resets}.")
+
+    def _show(self, value: str, color: str, reset: str) -> None:
+        self.value.setText(value)
+        self.value.setStyleSheet(f"font-weight: 600; color: {color};" if color != GREY else "")
+        self.value.setProperty("muted", color == GREY)
+        self.value.style().unpolish(self.value)
+        self.value.style().polish(self.value)
+        self.reset.setText(reset)
+        self.reset.setVisible(bool(reset))
+        self.bar.setStyleSheet(
+            "QProgressBar { border: none; border-radius: 3px; background: rgba(128, 128, 128, 0.25); }"
+            f"QProgressBar::chunk {{ border-radius: 3px; background: {color}; }}"
+        )
 
     def _hover(self, text: str) -> None:
-        text += "\nPlan usage reported by Claude Code during test runs (rate_limit_event)."
-        for widget in (self, self.title, self.bar):
+        text += "\nPlan usage as reported by Claude Code itself (rate_limit_event)."
+        for widget in (self, self.title, self.bar, self.value, self.reset):
             widget.setToolTip(text)
 
-    def _color(self, color: str) -> None:
-        self.bar.setStyleSheet(
-            f"QProgressBar {{ border: 1px solid {GREY}; border-radius: 7px; text-align: center; font-size: 8pt; }}"
-            "QProgressBar::chunk { border-radius: 6px; }"
-            f"QProgressBar::chunk {{ background: {color}; }}"
-        )
+
+class _UsageRefresher(QObject):
+    done = Signal(object, str)  # rate_limit_info or None, error text
+
+    def run(self) -> None:
+        def check() -> None:
+            self.done.emit(*claude_launcher.read_plan_usage())
+        threading.Thread(target=check, daemon=True).start()
 
 
 class _SignInChecker(QObject):
@@ -106,6 +124,16 @@ class TopBar(QWidget):
         self.seven_day = _WindowBar("Weekly")
         self.updated = QLabel()
         self.updated.setProperty("muted", True)
+        self.refresh_button = QToolButton()
+        self.refresh_button.setAutoRaise(True)
+        icons.set_icon(self.refresh_button, "rotate-cw")
+        self.refresh_button.setToolTip(
+            "Refresh plan usage now. Runs one tiny Claude Code call (Haiku, no tools), "
+            "which uses a very small part of your plan."
+        )
+        self.refresh_button.clicked.connect(self.refresh_from_claude)
+        self._refresher = _UsageRefresher(self)
+        self._refresher.done.connect(self._on_refreshed)
         self.close_all_button = QPushButton("Close all browsers")
         self.close_all_button.setToolTip(
             "Stop any running test and close every process the app or Playwright started. "
@@ -122,10 +150,11 @@ class TopBar(QWidget):
         layout.addWidget(self.close_all_button)
         layout.addStretch(1)
         layout.addWidget(self.five_hour)
-        layout.addSpacing(12)
+        layout.addSpacing(16)
         layout.addWidget(self.seven_day)
-        layout.addSpacing(10)
+        layout.addSpacing(12)
         layout.addWidget(self.updated)
+        layout.addWidget(self.refresh_button)
 
         self._checker = _SignInChecker(self)
         self._checker.done.connect(self._on_sign_in)
@@ -180,7 +209,25 @@ class TopBar(QWidget):
         self.five_hour.show_reading(state.get("five_hour"), now)
         self.seven_day.show_reading(state.get("seven_day"), now)
         observed = max((w.observed_at for w in state.values()), default=None)
+        if not self.refresh_button.isEnabled():
+            return  # a manual refresh is running; keep "Updating…"
         self.updated.setText(
             f"Updated {datetime.fromtimestamp(observed).strftime('%H:%M')}" if observed else "No usage data yet"
         )
+        self.updated.setToolTip("")
 
+
+    def refresh_from_claude(self) -> None:
+        """Ask Claude Code for a fresh usage reading (manual refresh)."""
+        self.refresh_button.setEnabled(False)
+        self.updated.setText("Updating…")
+        self._refresher.run()
+
+    def _on_refreshed(self, info: dict | None, error: str) -> None:
+        self.refresh_button.setEnabled(True)
+        if info is not None:
+            usage.record_event(self.usage_path, info)
+        self.refresh_usage()
+        if info is None:
+            self.updated.setText("Refresh failed")
+            self.updated.setToolTip(error)

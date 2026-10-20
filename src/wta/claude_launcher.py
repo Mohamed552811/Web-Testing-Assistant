@@ -199,6 +199,37 @@ def suggest_args(model: str = "") -> list[str]:
     ]
 
 
+# A manual usage refresh: the smallest call that makes Claude Code report its rate_limit_event.
+USAGE_CHECK_MODEL = "haiku"
+USAGE_CHECK_PROMPT = "Reply with OK."
+
+
+def read_plan_usage(timeout: float = 90) -> tuple[dict | None, str]:
+    """Run one tiny no-tools call and return Claude Code's own rate_limit_info (or None and why).
+    Blocking; call it off the UI thread. It uses a very small part of the plan."""
+    command = find_claude()
+    if command is None:
+        return None, "Claude Code is not installed (no `claude` on PATH)."
+    try:
+        done = subprocess.run(
+            command + suggest_args(USAGE_CHECK_MODEL), input=USAGE_CHECK_PROMPT,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=timeout, env=child_environment(), cwd=Path.home(),
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return None, f"Could not run Claude Code: {exc}"
+    for line in done.stdout.splitlines():
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(message, dict) and message.get("type") == "rate_limit_event" \
+                and isinstance(message.get("rate_limit_info"), dict):
+            return message["rate_limit_info"], ""
+    return None, "Claude Code did not report plan usage" + (f" (exit code {done.returncode})." if done.returncode else ".")
+
+
 # Test Case Designer: ask for the model's maximum output; Claude Code lowers it to each model's cap.
 DESIGNER_MAX_OUTPUT_TOKENS = 128000
 
