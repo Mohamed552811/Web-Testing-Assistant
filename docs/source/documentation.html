@@ -97,7 +97,7 @@
       tests your web application in a built-in browser, step by step, while you review every result before it counts.</p>
   </div>
   <div class="meta">
-    <b>Version</b> 1.1.3 (pre-release) &nbsp;·&nbsp; <b>Date</b> October 2026 &nbsp;·&nbsp; <b>Platform</b> Windows 10 and 11<br>
+    <b>Version</b> 1.1.4 (pre-release) &nbsp;·&nbsp; <b>Date</b> October 2026 &nbsp;·&nbsp; <b>Platform</b> Windows 10 and 11<br>
     <b>Source</b> github.com/Mohamed552811/Web-Testing-Assistant<br>
     All screenshots in this document were taken from the app itself: real test runs against the local test pages
     that ship with the project, and a real test case generation from a small demo workbook.
@@ -408,7 +408,19 @@ last session reopens with <i>Continue where you left off</i>.</figcaption></figu
   <tr><td class="k">Checklists</td><td>Manual checklist runs of designed test cases for this mode (chapter <a class="ref" href="#checklists"></a>).</td></tr>
 </table>
 
-<h2 id="window-menus"><span class="num">5.3</span>Menus and toolbar</h2>
+<h2 id="window-layout"><span class="num">5.3</span>Resizing, rearranging and expanding</h2>
+<p>In Regression and Smoke the browser and the work panel share the tab. Drag the divider between them to give either
+more room; neither can be dragged away completely. The buttons at the top right of the work panel rearrange them:</p>
+<table>
+  <tr><th style="width:24%">Button</th><th>What it does</th></tr>
+  <tr><td class="k">Swap</td><td>Puts the browser on the other side (or at the bottom, when stacked).</td></tr>
+  <tr><td class="k">Stack / Side by side</td><td>Places the browser and the panel one above the other, or next to each other.</td></tr>
+  <tr><td class="k">Reset</td><td>Browser left, panel right, half each.</td></tr>
+  <tr><td class="k">Expand</td><td>Lets the panel fill the whole tab. The browser has its own Expand button at the end of its address bar. Click it again to bring both sides back at the sizes they had.</td></tr>
+</table>
+<p>The layout is not saved: the app always opens with both sides, side by side, half each.</p>
+
+<h2 id="window-menus"><span class="num">5.4</span>Menus and toolbar</h2>
 <table>
   <tr><th style="width:24%">Menu</th><th>Items</th></tr>
   <tr><td class="k">Mode</td><td>Test Case Design, Regression Testing, Smoke Testing, Back to Launchpad, Quit (<kbd>Ctrl</kbd>+<kbd>Q</kbd>).</td></tr>
@@ -428,7 +440,7 @@ the menus:</p>
   <tr><td class="k">Close browsers</td><td>Stop any run and close every process the app or Playwright started.</td></tr>
 </table>
 
-<h2 id="window-usage"><span class="num">5.4</span>Plan usage and notifications</h2>
+<h2 id="window-usage"><span class="num">5.5</span>Plan usage and notifications</h2>
 <figure><img src="../images/27-usage-strip.png" alt="">
 <figcaption><b>Figure 6.</b> The usage gauges: percentage and reset time next to each bar, the time of the last
 reading, and the refresh button.</figcaption></figure>
