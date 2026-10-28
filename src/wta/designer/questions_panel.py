@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from wta import icons
+from wta import icons, snackbar
 from wta.db import Database
 from wta.db import designer_content as content
 
@@ -91,3 +91,4 @@ class QuestionsPanel(QWidget):
         content.answer_question(self.db, self.questions[row].id, self.answer.toPlainText())
         self.reload()
         self.answered.emit()
+        snackbar.show(self, "Answer added to the backlog's notes.")

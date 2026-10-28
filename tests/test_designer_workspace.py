@@ -329,7 +329,9 @@ class WorkspaceTests(Fixture):
         questions = w.questions_panel
         questions.list.setCurrentRow(0)
         questions.answer.setPlainText("CSV only.")
-        questions.answer_button.click()
+        with mock.patch("wta.designer.questions_panel.snackbar.show") as snack:
+            questions.answer_button.click()
+        self.assertEqual(snack.call_args.args[1], "Answer added to the backlog's notes.")
         self.assertEqual(w.tabs.tabText(2), "Open questions")
         self.assertEqual(w.backlog_panel.notes.count(), 2)
 

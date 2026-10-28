@@ -107,6 +107,22 @@ class ScenarioTabTests(Fixture):
         self.assertIn("Re-run requested", self.tab.step_details.toPlainText())
         self.assertEqual(self.tab.step_model.row_of(step.id), 0)
 
+    def test_review_decisions_show_a_snackbar(self):
+        self.step(StepStatus.FAIL)
+        self.tab.set_session(self.session.id)
+        with mock.patch("wta.scenario_tab.snackbar.show") as snack:
+            self.tab.approve_button.click()
+            self.assertEqual(snack.call_args.args[1], "Step 1 approved: Fail.")
+            self.tab.override_combo.setCurrentIndex(self.tab.override_combo.findData(StepStatus.BLOCKED))
+            self.tab.override_button.click()
+            self.assertEqual(snack.call_args.args[1], "Step 1 set to Blocked (override saved).")
+            self.tab.rerun_button.click()
+            self.assertEqual(snack.call_args.args[1], "Step 1 sent back: it runs again on the next Run batch.")
+            self.tab.override_combo.setCurrentIndex(self.tab.override_combo.findData(StepStatus.FAIL))
+            with mock.patch.object(QMessageBox, "information"):
+                self.tab.override_button.click()  # refused: Claude already said Fail
+            self.assertEqual(snack.call_count, 3)  # no snackbar for a refused decision
+
     def test_override_to_same_status_is_refused(self):
         self.step(StepStatus.PASS)
         self.tab.set_session(self.session.id)

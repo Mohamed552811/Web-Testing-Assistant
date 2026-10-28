@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from wta import cost
+from wta import cost, snackbar
 from wta.db import Database, library, store
 from wta.db import runs as run_store
 from wta.db import scenarios as sc
@@ -601,6 +601,7 @@ class ScenarioTab(QWidget):
             QMessageBox.information(self, "Save as site note", f"{exc} Write the note in the comment box first.")
             return
         self.status_message.emit(f"Saved as a site note for {self.site}. It is added to the next runs on this site.")
+        snackbar.show(self, f"Site note saved for {self.site}.")
         self.site_note_saved.emit()
 
     # --- keyboard ------------------------------------------------------------
@@ -633,7 +634,8 @@ class ScenarioTab(QWidget):
         if not self.handle_review_key(event):
             super().keyPressEvent(event)
 
-    def _review(self, action) -> None:
+    def _review(self, action, done: str) -> None:
+        """Apply a review decision; `done` is the snackbar text, with {step} for "Step 4" / "Check 4"."""
         step = self._current_step()
         if step is None:
             return
@@ -644,16 +646,21 @@ class ScenarioTab(QWidget):
             return
         self.comment.clear()
         self._load_steps(select_id=step.id)
+        snackbar.show(self, done.format(step=f"{'Check' if self.smoke else 'Step'} {step.order}",
+                                        claude=self.labels.get(step.status, step.status.value)))
 
     def approve(self) -> None:
-        self._review(lambda step: sc.approve_step(self.db, step.id, self.comment.toPlainText()))
+        self._review(lambda step: sc.approve_step(self.db, step.id, self.comment.toPlainText()),
+                     "{step} approved: {claude}.")
 
     def override(self) -> None:
         status = StepStatus(self.override_combo.currentData())
-        self._review(lambda step: sc.override_step(self.db, step.id, status, self.comment.toPlainText()))
+        self._review(lambda step: sc.override_step(self.db, step.id, status, self.comment.toPlainText()),
+                     f"{{step}} set to {self.labels.get(status, status.value)} (override saved).")
 
     def request_rerun(self) -> None:
-        self._review(lambda step: sc.request_rerun(self.db, step.id, self.comment.toPlainText()))
+        self._review(lambda step: sc.request_rerun(self.db, step.id, self.comment.toPlainText()),
+                     "{step} sent back: it runs again on the next Run batch.")
 
 
 def _badge(status: StepStatus, labels: dict) -> str:

@@ -219,7 +219,9 @@ class ReviewPanelTests(Fixture):
             self.tab.site_note_button.click()  # empty comment
         info.assert_called_once()
         self.tab.comment.setPlainText("The coupon field needs a second click")
-        self.tab.site_note_button.click()
+        with mock.patch("wta.scenario_tab.snackbar.show") as snack:
+            self.tab.site_note_button.click()
+        self.assertEqual(snack.call_args.args[1], "Site note saved for app.example.")
         self.assertEqual([n.note for n in site_notes.list_notes(self.db, "app.example")],
                          ["The coupon field needs a second click"])
         self.assertEqual(saved, [True])
