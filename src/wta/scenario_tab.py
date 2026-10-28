@@ -307,6 +307,7 @@ class ScenarioTab(QWidget):
         if answer == QMessageBox.StandardButton.Yes:
             self._fill_batches(batches, number)
             self.status_message.emit(f"Batch {number} started. Add up to {MAX_SCENARIOS_PER_BATCH} {self.item_name}s.")
+            snackbar.show(self, f"Batch {number} started.")
 
     # --- scenarios -----------------------------------------------------------
 
@@ -402,6 +403,7 @@ class ScenarioTab(QWidget):
             return
         sc.set_account(self.db, scenario.id, dialog.account_id())
         self._load_scenarios(select_id=scenario.id)
+        snackbar.show(self, f"{self.item_name.capitalize()} “{scenario.name}” added.")
 
     def edit_scenario(self) -> None:
         scenario = self._current_scenario()
@@ -414,6 +416,7 @@ class ScenarioTab(QWidget):
                 sc.update_smoke_page(self.db, scenario.id, dialog.data())
                 sc.set_account(self.db, scenario.id, dialog.account_id())
                 self._load_scenarios(select_id=scenario.id)
+                snackbar.show(self, "Smoke page saved.")
             return
         dialog = ScenarioDialog(self, sc.ScenarioInput.of(scenario), accounts=self._accounts(),
                                 account_id=scenario.account_id)
@@ -421,6 +424,7 @@ class ScenarioTab(QWidget):
             sc.update_scenario(self.db, scenario.id, dialog.data())
             sc.set_account(self.db, scenario.id, dialog.account_id())
             self._load_scenarios(select_id=scenario.id)
+            snackbar.show(self, "Scenario saved.")
 
     def add_from_library(self) -> None:
         if self.session_id is None:
@@ -436,6 +440,7 @@ class ScenarioTab(QWidget):
             return
         self._load_scenarios(select_id=added[-1].id if added else None)
         self.status_message.emit(f"Added {len(added)} {self.item_name}(s) from the library.")
+        snackbar.show(self, f"Added {len(added)} {self.item_name}(s) from the library.")
 
     def add_suggested(self, scenarios: list, to_library: bool) -> list:
         """Add scenarios Claude suggested (and the user picked) to the batch, and to the library if asked."""
@@ -446,6 +451,8 @@ class ScenarioTab(QWidget):
         else:
             added = [sc.add_scenario(self.db, self.session_id, self.batch, s) for s in scenarios]
         self._load_scenarios(select_id=added[-1].id if added else None)
+        snackbar.show(self, f"Added {len(added)} suggested scenario(s)" + (" and saved them to the library."
+                                                                            if to_library else "."))
         self.status_message.emit(f"Added {len(added)} suggested scenario(s)" + (" and saved them to the library."
                                                                                if to_library else "."))
         return added
@@ -460,6 +467,7 @@ class ScenarioTab(QWidget):
             QMessageBox.warning(self, "Save to library", str(exc))
             return
         self._load_scenarios(select_id=scenario.id)
+        snackbar.show(self, f"“{scenario.name}” " + ("saved to the library." if created else "updated in the library."))
         self.status_message.emit(f"“{scenario.name}” " + ("saved to the library." if created
                                                            else "updated in the library."))
 
@@ -473,6 +481,7 @@ class ScenarioTab(QWidget):
         if answer == QMessageBox.StandardButton.Yes:
             sc.delete_scenario(self.db, scenario.id)
             self._load_scenarios()
+            snackbar.show(self, f"{self.item_name.capitalize()} “{scenario.name}” removed.")
 
     # --- steps ---------------------------------------------------------------
 
@@ -535,6 +544,7 @@ class ScenarioTab(QWidget):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             step = sc.add_step(self.db, scenario.id, dialog.data())
             self._load_steps(select_id=step.id)
+            snackbar.show(self, f"{'Check' if self.smoke else 'Step'} {step.order} added.")
 
     def edit_step(self) -> None:
         step = self._current_step()
@@ -549,6 +559,7 @@ class ScenarioTab(QWidget):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             sc.update_step(self.db, step.id, dialog.data())
             self._load_steps(select_id=step.id)
+            snackbar.show(self, f"{'Check' if self.smoke else 'Step'} {step.order} saved.")
 
     def delete_step(self) -> None:
         step = self._current_step()
@@ -558,6 +569,7 @@ class ScenarioTab(QWidget):
         if answer == QMessageBox.StandardButton.Yes:
             sc.delete_step(self.db, step.id)
             self._load_steps()
+            snackbar.show(self, f"{'Check' if self.smoke else 'Step'} {step.order} deleted.")
 
     # --- review --------------------------------------------------------------
 
@@ -590,6 +602,7 @@ class ScenarioTab(QWidget):
     def _bug_saved(self) -> None:
         step = self._current_step()
         self.status_message.emit("Bug report saved. Claude's original is kept.")
+        snackbar.show(self, "Bug report saved.")
         self._load_steps(select_id=step.id if step else None)
 
     def save_site_note(self) -> None:

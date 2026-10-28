@@ -253,6 +253,21 @@ class WorkspaceTests(Fixture):
         self.assertEqual(w.sheet_combo.currentData(), ALL_SHEETS)
         self.assertEqual(w.backlog_panel.backlog.number, "1")
 
+    def test_saved_changes_show_a_snackbar(self):
+        w = self.workspace
+        w.select_backlog(self.main.backlogs[2].id)
+        panel = w.backlog_panel
+        with mock.patch("wta.designer.backlog_panel.snackbar.show") as snack:
+            with mock.patch.object(QInputDialog, "getMultiLineText", return_value=("It lists nothing yet.", True)):
+                panel.add_note()
+            self.assertEqual(snack.call_args.args[1], "Note added.")
+            panel.notes.setCurrentRow(0)
+            panel._remove(panel.notes)
+            self.assertEqual(snack.call_args.args[1], "Note removed.")
+            with mock.patch.object(QInputDialog, "getMultiLineText", return_value=("", False)):
+                panel.add_note()  # cancelled: nothing saved, no snackbar
+            self.assertEqual(snack.call_count, 2)
+
     def test_notes_context_and_pictures(self):
         w = self.workspace
         w.select_backlog(self.main.backlogs[2].id)  # the empty one

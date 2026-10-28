@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from wta import __version__
-from wta import accessibility, cdp, compare, cost, fixtures, housekeeping, icons, notify, test_data, theme
+from wta import accessibility, cdp, compare, cost, fixtures, housekeeping, icons, notify, snackbar, test_data, theme
 from wta import settings as app_settings
 from wta import launchpad as modes
 from wta.db import designer_settings
@@ -504,6 +504,8 @@ class MainWindow(QMainWindow):
                         workbook_store.apply_mapping(self.db, sheet.id, result.reusable_mappings[sheet.name])
                 view = workbook_store.load_workbook(self.db, result.workbook_id)
         self._refresh_workbooks(result.workbook_id)
+        if not result.already_uploaded:
+            snackbar.show(self, f"{view.file_name} uploaded ({view.version_label}, {view.backlog_count} backlog(s)).")
         doubtful = [s for s in view.sheets if not s.manual and s.confidence < LOW_CONFIDENCE]
         if doubtful and not result.already_uploaded:
             names = ", ".join(f"“{s.name}”" for s in doubtful)
@@ -524,6 +526,7 @@ class MainWindow(QMainWindow):
         sheet = workbook_store.apply_mapping(self.db, dialog.selected_sheet_id(), dialog.result_mapping())
         self._refresh_workbooks(workbook_id)
         self.statusBar().showMessage(f"Sheet “{sheet.name}”: {len(sheet.backlogs)} backlog(s) with the new mapping.", 8000)
+        snackbar.show(self, f"Mapping and product context saved ({len(sheet.backlogs)} backlog(s) on “{sheet.name}”).")
 
     def edit_designer_settings(self) -> None:
         dialog = DesignerSettingsDialog(designer_settings.load(self.db), self)
@@ -535,6 +538,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Test Case Design settings", str(exc))
             return
         self.statusBar().showMessage("Test Case Design settings saved.", 5000)
+        snackbar.show(self, "Test Case Design settings saved.")
 
     def open_designer_workspace(self, workbook_id: int) -> None:
         try:
@@ -653,6 +657,7 @@ class MainWindow(QMainWindow):
         if theme_changed and QApplication.instance() is not None:
             theme.apply(QApplication.instance(), self.settings.theme)
         self.statusBar().showMessage("Settings saved.", 5000)
+        snackbar.show(self, "Settings saved.")
 
     def export_report(self, path: Path | None = None) -> Path | None:
         """Export the open session's report in the default format (Settings) or the one chosen."""
@@ -737,6 +742,7 @@ class MainWindow(QMainWindow):
             return
         session = store.create_session(self.db, dialog.details(), browser_version=f"Chromium {qWebEngineChromiumVersion()}")
         self.show_session(session)
+        snackbar.show(self, f"Session “{session.name}” created.")
 
     def open_session(self) -> None:
         dialog = OpenSessionDialog(store.list_sessions(self.db), self)
@@ -756,6 +762,7 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         self.show_session(store.update_session(self.db, self.current_session.id, dialog.details()))
+        snackbar.show(self, "Session details saved.")
 
     def show_session(self, session: TestSession) -> None:
         if self.mode not in (modes.REGRESSION, modes.SMOKE):  # sessions live in the testing modes
@@ -1029,6 +1036,8 @@ class MainWindow(QMainWindow):
             "cleared the embedded browser",
         ]
         self.statusBar().showMessage("Close all browsers: " + ", ".join(parts) + ".")
+        snackbar.show(self, f"Browsers closed ({len(tracked)} process(es) the app started)." if tracked
+                      else "Browsers closed.", snackbar.INFO)
 
     def _print_requested(self, page) -> None:
         """During a run, save what the page would print as print-N.pdf in the run folder, for Claude to read."""

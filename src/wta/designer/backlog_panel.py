@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from wta import icons
+from wta import icons, snackbar
 from wta.db import Database
 from wta.db import designer_content as content
 from wta.db import workbooks as wb
@@ -315,6 +315,7 @@ class BacklogPanel(QWidget):
             wb.attach_image(self.db, self.backlog.id, choices[labels.index(label)].id)
             self.refresh()
             self.changed.emit()
+            snackbar.show(self, f"Picture {choices[labels.index(label)].label} attached.")
 
     def detach_picture(self) -> None:
         image_id = self._current_picture_id()
@@ -322,6 +323,7 @@ class BacklogPanel(QWidget):
             wb.detach_image(self.db, self.backlog.id, image_id)
             self.refresh()
             self.changed.emit()
+            snackbar.show(self, "Picture detached.")
 
     def move_picture(self, offset: int) -> None:
         row, image_id = self.pictures.currentRow(), self._current_picture_id()
@@ -349,6 +351,7 @@ class BacklogPanel(QWidget):
             content.add_context(self.db, self.backlog.id, content.DOMAIN_NOTE, text)
             self.refresh()
             self.changed.emit()
+            snackbar.show(self, "Note added.")
 
     def edit_note(self) -> None:
         item = self.notes.currentItem()
@@ -359,6 +362,7 @@ class BacklogPanel(QWidget):
             content.update_context(self.db, item.data(Qt.ItemDataRole.UserRole), text)
             self.refresh()
             self.changed.emit()
+            snackbar.show(self, "Note saved.")
 
     def add_from_backlog(self) -> None:
         if self.backlog is None:
@@ -381,6 +385,7 @@ class BacklogPanel(QWidget):
             content.add_context(self.db, self.backlog.id, content.SUPPLEMENTARY, text, source)
             self.refresh()
             self.changed.emit()
+            snackbar.show(self, "Supplementary context added.")
 
     def paste_context(self) -> None:
         if self.backlog is None:
@@ -390,6 +395,7 @@ class BacklogPanel(QWidget):
             content.add_context(self.db, self.backlog.id, content.SUPPLEMENTARY, text, "pasted text")
             self.refresh()
             self.changed.emit()
+            snackbar.show(self, "Supplementary context added.")
 
     def _remove(self, list_widget: QListWidget) -> None:
         item = list_widget.currentItem()
@@ -397,3 +403,4 @@ class BacklogPanel(QWidget):
             content.delete_context(self.db, item.data(Qt.ItemDataRole.UserRole))
             self.refresh()
             self.changed.emit()
+            snackbar.show(self, "Note removed." if list_widget is self.notes else "Supplementary context removed.")

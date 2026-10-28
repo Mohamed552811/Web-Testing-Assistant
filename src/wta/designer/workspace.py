@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from wta import icons
+from wta import icons, snackbar
 from wta.db import Database
 from wta.db import designer_content as content
 from wta.db import designer_settings, generations
@@ -338,6 +338,7 @@ class DesignerWorkspace(QWidget):
             questions = len(outcome.response.get("open_questions") or [])
             self.status_message.emit(f"{count} test case(s) and {questions} open question(s) generated "
                                      f"with {outcome.model_id}.")
+            snackbar.show(self, f"Backlog {number}: {count} test case(s) and {questions} open question(s) generated.")
             if backlog_id == self.current_backlog_id():
                 self.tabs.setCurrentWidget(self.results_panel)
         elif outcome.status == "insufficient_information":
@@ -360,6 +361,7 @@ class DesignerWorkspace(QWidget):
         if dialog.restored:
             self._backlog_chosen(self.backlogs.currentItem())
             self.status_message.emit("An earlier generation was restored.")
+            snackbar.show(self, "Earlier generation restored.")
 
     def _workbook_backlog_ids(self) -> list[int]:
         return [b.id for s in (self.view.sheets if self.view else []) for b in s.backlogs]
@@ -460,6 +462,7 @@ class DesignerWorkspace(QWidget):
                                               self.view.product_context if self.view else ""))
             QGuiApplication.clipboard().setText(text)
             self.status_message.emit(f"Copied a {dialog.mode()} checklist prompt with {len(cases)} test case(s).")
+            snackbar.show(self, f"Prompt with {len(cases)} test case(s) copied to the clipboard.")
             return
         if kind == SCENARIOS:
             source = f"{self.view.file_name} ({self.view.version_label})"

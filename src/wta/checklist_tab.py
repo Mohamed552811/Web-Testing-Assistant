@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from wta import icons
+from wta import icons, snackbar
 from wta.db import Database, checklists
 
 RESULT_ICONS = {"pass": "circle-check", "fail": "circle-x", "blocked": "square", "skipped": "arrow-right"}
@@ -253,6 +253,7 @@ class ChecklistTab(QWidget):
         if item is not None:
             checklists.record(self.db, item.id, item.result, self.notes.toPlainText())
             self._reload_runs_keep(self.items.currentRow())
+            snackbar.show(self, "Notes saved.")
 
     def _reload_runs_keep(self, row: int) -> None:
         run_id = self.run_combo.currentData()
@@ -268,6 +269,7 @@ class ChecklistTab(QWidget):
         if chosen:
             checklists.attach(self.db, item.id, Path(chosen), self.attachments_dir)
             self._reload_runs_keep(self.items.currentRow())
+            snackbar.show(self, "Screenshot attached.")
 
     def open_attachment(self) -> None:
         item = self.current_item()
@@ -286,6 +288,7 @@ class ChecklistTab(QWidget):
             return
         self._reload_runs_keep(self.items.currentRow())
         self.status_message.emit(f"{changed} test case(s) updated from Test Case Design.")
+        snackbar.show(self, f"{changed} test case(s) updated from Test Case Design.")
 
     def toggle_completed(self) -> None:
         if self.run is None:
@@ -296,10 +299,12 @@ class ChecklistTab(QWidget):
                                           "result yet. Complete the run anyway?")
             if answer != QMessageBox.StandardButton.Yes:
                 return
-        checklists.set_completed(self.db, self.run.id, completing)
+        run_id = self.run.id
+        checklists.set_completed(self.db, run_id, completing)
         if completing:
             self.show_completed.setChecked(True)
-        self.refresh(self.run.id)
+        self.refresh(run_id)
+        snackbar.show(self, "Run completed." if completing else "Run reopened.")
 
     def export(self) -> None:
         if self.run is None:
@@ -318,11 +323,14 @@ class ChecklistTab(QWidget):
             QMessageBox.warning(self, "Export checklist run", f"Could not export:\n{exc}")
             return
         self.status_message.emit(f"Checklist run exported to {path}")
+        snackbar.show(self, f"Checklist run exported to {Path(path).name}.")
 
     def delete_run(self) -> None:
         if self.run is None:
             return
         answer = QMessageBox.question(self, "Delete run", f"Delete the run “{self.run.name}” and its results?")
         if answer == QMessageBox.StandardButton.Yes:
+            name = self.run.name
             checklists.delete_run(self.db, self.run.id, self.attachments_dir)
             self.refresh()
+            snackbar.show(self, f"Run “{name}” deleted.")

@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
 
 from wta.db import Database
 from wta.db import runs as run_store
-from wta import claude_launcher, compare
+from wta import claude_launcher, compare, snackbar
 from wta.db import site_notes
 from wta.db.models import PageIssueKind, Run, RunOutcomeKind, ScenarioKind, TraceKind
 from wta.run_panel import KIND_STYLE
@@ -113,6 +113,7 @@ class SiteNotesPanel(QGroupBox):
         self.new_note.clear()
         self.refresh()
         self.notes_changed.emit()
+        snackbar.show(self, f"Site note added for {self.site}.")
 
     def delete_selected(self) -> None:
         item = self.list.currentItem()
@@ -121,6 +122,7 @@ class SiteNotesPanel(QGroupBox):
         site_notes.delete_note(self.db, item.data(Qt.ItemDataRole.UserRole))
         self.refresh()
         self.notes_changed.emit()
+        snackbar.show(self, "Site note deleted.")
 
 
 class RunsTab(QWidget):

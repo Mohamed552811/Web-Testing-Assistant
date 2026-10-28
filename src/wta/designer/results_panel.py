@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from wta import icons
+from wta import icons, snackbar
 from wta.db import Database
 from wta.db import designer_content as content
 from wta.designer.settings import PER_STEP_EXPECTED, DesignerSettings
@@ -312,7 +312,7 @@ class ResultsPanel(QWidget):
 
         self.model.edited.connect(self.reload)
         self.add_button.clicked.connect(self.add_case)
-        self.duplicate_button.clicked.connect(lambda: self._with_selected(content.duplicate_case))
+        self.duplicate_button.clicked.connect(self.duplicate_case)
         self.delete_button.clicked.connect(self.delete_case)
         self.up_button.clicked.connect(lambda: self._move(-1))
         self.down_button.clicked.connect(lambda: self._move(1))
@@ -420,6 +420,11 @@ class ResultsPanel(QWidget):
             new_id = action(self.db, row_id)
             self.reload(new_id if isinstance(new_id, int) else row_id)
 
+    def duplicate_case(self) -> None:
+        if self.selected_row_id() is not None:
+            self._with_selected(content.duplicate_case)
+            snackbar.show(self, "Test case duplicated.")
+
     def add_case(self) -> None:
         if self.backlog_id is None:
             return
@@ -436,6 +441,7 @@ class ResultsPanel(QWidget):
         if answer == QMessageBox.StandardButton.Yes:
             content.delete_case(self.db, row_id)
             self.reload()
+            snackbar.show(self, f"Test case {case.data.get('id', '')} deleted.")
 
     def _move(self, offset: int) -> None:
         row_id = self.selected_row_id()
@@ -447,3 +453,4 @@ class ResultsPanel(QWidget):
         if self.backlog_id is not None:
             content.renumber(self.db, self.backlog_id, self.settings, self.backlog_key)
             self.reload()
+            snackbar.show(self, "Test case IDs renumbered.")
