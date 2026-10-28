@@ -97,7 +97,7 @@ The toolbar of Regression and Smoke holds the session and browser actions: **New
 
 The strip at the top shows Claude Code sign-in and your 5-hour and weekly plan usage, each with its reset time (on hover when the window is narrow). Usage is updated during runs from data Claude Code reports. The **refresh** button (↻) asks for it now: it runs one tiny Claude Code call (Haiku, no tools), which uses a very small part of your plan. After a window resets, its old reading shows as "– needs refresh".
 
-When you save a change (a review decision, a note, settings, a session, a test case edit, a checklist result note …), a short **snackbar** message in the bottom-right corner confirms it and fades out after a few seconds; hover keeps it, click closes it.
+When you save a change (a review decision, a note, settings, a session, a scenario or step, a checklist note …), a short **snackbar** message in the bottom-right corner confirms it and fades out after a few seconds; hover keeps it, click closes it.
 
 The light theme is cream white with a teal accent; the dark theme uses brick red (**Settings → Theme**, or follow Windows).
 
