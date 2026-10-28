@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "web-testing-assistant"
-version = "1.1.4"
+version = "1.1.5"
 description = "Desktop app where Claude Code runs web-app tests and the user reviews them"
 requires-python = ">=3.12"
 dependencies = [
